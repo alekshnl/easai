@@ -1,28 +1,26 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/sidebar/app-sidebar";
-import { ChatView } from "@/components/chat/chat-view";
+import { ResizableLayout } from "@/components/resizable-layout";
+import { Topbar } from "@/components/topbar/topbar";
 import { SettingsDialog } from "@/components/settings/settings-dialog";
 import { CreateProjectDialog } from "@/components/projects/create-project-dialog";
 import { OAuthWaitDialog } from "@/components/auth/oauth-wait-dialog";
 import { useAccounts } from "@/hooks/use-accounts";
 import { useSessions } from "@/hooks/use-sessions";
 import { useProjects } from "@/hooks/use-projects";
+import { useAccountUsage } from "@/hooks/use-account-usage";
 import type { Session } from "@/hooks/use-sessions";
 import type { Project } from "@/hooks/use-projects";
 import { toast } from "sonner";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
-import { FolderOpen } from "lucide-react";
 
 function AppShellInner() {
   const searchParams = useSearchParams();
 
   const {
     accounts,
-    loading: accountsLoading,
     fetchAccounts,
     deleteAccount,
     startOAuth,
@@ -31,7 +29,6 @@ function AppShellInner() {
   const {
     projects,
     loading: projectsLoading,
-    fetchProjects,
     createProject,
     deleteProject,
   } = useProjects();
@@ -53,16 +50,21 @@ function AppShellInner() {
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
+  const [initialized, setInitialized] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
   const [oauthWaiting, setOauthWaiting] = useState(false);
   const oauthCleanupRef = useRef<(() => void) | null>(null);
 
-  const initialized = useRef(false);
+  const accountIds = accounts.map((a) => a.id);
+  const { usageMap, fetchAll, refetchAccount } = useAccountUsage(accountIds);
+
+  const dbInitialized = useRef(false);
   useEffect(() => {
-    if (initialized.current) return;
-    initialized.current = true;
+    if (dbInitialized.current) return;
+    dbInitialized.current = true;
     fetch("/api/init", { method: "POST" }).catch(console.error);
+    if (accountIds.length > 0) fetchAll();
   }, []);
 
   useEffect(() => {
@@ -81,30 +83,35 @@ function AppShellInner() {
     }
   }, [searchParams, fetchAccounts]);
 
+  // Initialize account and project selection once
   useEffect(() => {
-    if (accounts.length > 0 && !selectedAccountId) {
-      setSelectedAccountId(accounts[0].id);
-      setSelectedModel("gpt-5.4");
-    }
-  }, [accounts, selectedAccountId]);
+    if (initialized) return;
+    if (accounts.length === 0 || projectsLoading) return;
 
-  // Restore selected project from localStorage after projects load
-  useEffect(() => {
-    if (projectsLoading || projects.length === 0 || selectedProject) return;
-    const savedId = localStorage.getItem("easai:selectedProjectId");
-    if (savedId) {
-      const found = projects.find((p) => p.id === savedId);
-      if (found) {
-        setSelectedProject(found);
+    const accountId = selectedAccountId || accounts[0]?.id || null;
+    const model = selectedModel || "gpt-5.4";
+    let project = selectedProject;
+
+    if (!project) {
+      const savedId = localStorage.getItem("easai:selectedProjectId");
+      if (savedId) {
+        const found = projects.find((p) => p.id === savedId);
+        if (found) project = found;
       }
     }
-  }, [projects, projectsLoading, selectedProject]);
+
+    setSelectedAccountId(accountId);
+    setSelectedModel(model);
+    if (project && project !== selectedProject) setSelectedProject(project);
+    setSelectedSession(null);
+    setInitialized(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialized, accounts, projects, projectsLoading]);
 
   useEffect(() => {
-    if (selectedProject) {
-      setSelectedSession(null);
-      fetchSessions(selectedProject.id);
-    }
+    if (!selectedProject) return;
+    setSelectedSession(null); // eslint-disable-line react-hooks/set-state-in-effect
+    fetchSessions(selectedProject.id);
   }, [selectedProject, fetchSessions]);
 
   const handleSelectProject = useCallback((project: Project) => {
@@ -224,82 +231,44 @@ function AppShellInner() {
   const currentWorkspace = selectedProject?.workspaceFolder ?? null;
 
   return (
-    <>
-      <SidebarProvider
-        defaultOpen={true}
-        style={
-          {
-            "--sidebar-width": "260px",
-          } as React.CSSProperties
-        }
-      >
-        <div className="flex h-screen w-full overflow-hidden">
-          <SidebarInset className="flex flex-col overflow-hidden">
-            <div className="flex h-10 items-center justify-between border-b border-border/30 px-4">
-              <span className="font-mono text-xs text-muted-foreground/40 truncate">
-                {selectedSession?.title ?? selectedProject?.name ?? "easai"}
-              </span>
-              {currentWorkspace && (
-                <div className="flex items-center gap-1.5 font-mono text-xs text-muted-foreground/50">
-                  <FolderOpen className="h-3 w-3" />
-                  <span className="truncate max-w-[300px]">{currentWorkspace}</span>
-                </div>
-              )}
-            </div>
+    <div className="flex h-screen w-full flex-col">
+      <Topbar
+          accounts={accounts}
+          selectedAccountId={selectedAccountId}
+          selectedModel={selectedModel}
+          usageMap={usageMap}
+          onAccountModelChange={handleAccountModelChange}
+          onAddAccount={handleAddAccount}
+          onDeleteAccount={handleDeleteAccount}
+          onOpenSettings={() => setSettingsOpen(true)}
+          onFetchAllUsage={fetchAll}
+          onRefetchAccountUsage={refetchAccount}
+        />
 
-            <ChatView
-              session={selectedSession}
-              accounts={accounts}
-              selectedAccountId={selectedAccountId}
-              selectedModel={selectedModel}
-              onAccountModelChange={handleAccountModelChange}
-              onSessionUpdate={() => fetchSessions(selectedProject?.id)}
-            />
-          </SidebarInset>
-
-          <AppSidebar
-            accounts={accounts}
-            accountsLoading={accountsLoading}
-            projects={projects}
-            projectsLoading={projectsLoading}
-            projectSessions={activeSessions}
-            archivedSessions={archivedSessions}
-            sessionsLoading={sessionsLoading}
-            selectedProjectId={selectedProject?.id ?? null}
-            selectedSessionId={selectedSession?.id ?? null}
-            selectedAccountId={selectedAccountId}
-            selectedModel={selectedModel}
-            onSelectSession={handleSelectSession}
-            onSelectProject={handleSelectProject}
-            onNewProject={() => setCreateProjectOpen(true)}
-            onNewSession={handleNewSession}
-            onArchiveSession={handleArchiveSession}
-            onUnarchiveSession={unarchiveSession}
-            onDeleteSession={handleDeleteSession}
-            onRenameSession={handleRenameSession}
-            onDeleteProject={handleDeleteProject}
-            onAddAccount={handleAddAccount}
-            onDeleteAccount={handleDeleteAccount}
-            onSelectAccountModel={handleAccountModelChange}
-            onOpenSettings={() => setSettingsOpen(true)}
-          />
-        </div>
-      </SidebarProvider>
-
-      <OAuthWaitDialog
-        open={oauthWaiting}
-        onCancel={() => {
-          oauthCleanupRef.current?.();
-          setOauthWaiting(false);
-        }}
-      />
-      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
-      <CreateProjectDialog
-        open={createProjectOpen}
-        onOpenChange={setCreateProjectOpen}
-        onSubmit={handleCreateProject}
-      />
-    </>
+        <ResizableLayout
+          selectedSession={selectedSession}
+          selectedProject={selectedProject}
+          currentWorkspace={currentWorkspace}
+          selectedAccountId={selectedAccountId}
+          selectedModel={selectedModel}
+          projects={projects}
+          projectsLoading={projectsLoading}
+          activeSessions={activeSessions}
+          archivedSessions={archivedSessions}
+          sessionsLoading={sessionsLoading}
+          handleSelectProject={handleSelectProject}
+          setCreateProjectOpen={setCreateProjectOpen}
+          handleNewSession={handleNewSession}
+          handleSelectSession={handleSelectSession}
+          handleArchiveSession={handleArchiveSession}
+          handleUnarchiveSession={unarchiveSession}
+          handleDeleteSession={handleDeleteSession}
+          handleRenameSession={handleRenameSession}
+          handleDeleteProject={handleDeleteProject}
+          handleAccountModelChange={handleAccountModelChange}
+          fetchSessions={fetchSessions}
+        />
+      </div>
   );
 }
 

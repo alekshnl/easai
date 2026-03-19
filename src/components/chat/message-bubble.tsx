@@ -1,8 +1,7 @@
 "use client";
 
 import React, { useMemo } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { Markdown } from "./markdown";
 import { cn } from "@/lib/utils";
 import { ToolCallList, type ToolCallDisplayData } from "./tool-call-display";
 import type { Message } from "@/hooks/use-chat";
@@ -58,10 +57,8 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             {message.content}
           </div>
         ) : (
-          <div className="prose prose-sm dark:prose-invert max-w-none font-mono text-sm leading-relaxed [&_code]:rounded [&_code]:bg-muted [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:text-xs [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-muted [&_pre]:p-4 [&_pre_code]:bg-transparent [&_pre_code]:p-0">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {message.content}
-            </ReactMarkdown>
+          <div className="max-w-none font-mono text-sm leading-relaxed text-foreground">
+            <Markdown text={message.content} />
             {toolCalls.length > 0 && <ToolCallList toolCalls={toolCalls} />}
           </div>
         )}
@@ -87,9 +84,9 @@ export function StreamingBubble({ content, activeToolCalls }: StreamingBubblePro
       <div className="mt-1 h-2 w-2 shrink-0 rounded-full bg-muted-foreground/40 animate-pulse" />
 
       <div className="max-w-[85%] min-w-0">
-        <div className="prose prose-sm dark:prose-invert max-w-none font-mono text-sm leading-relaxed [&_code]:rounded [&_code]:bg-muted [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:text-xs [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-muted [&_pre]:p-4 [&_pre_code]:bg-transparent [&_pre_code]:p-0">
+        <div className="max-w-none font-mono text-sm leading-relaxed text-foreground">
           {content ? (
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+            <Markdown text={content} />
           ) : activeToolCalls.length > 0 ? null : (
             <span className="animate-pulse text-muted-foreground">▋</span>
           )}

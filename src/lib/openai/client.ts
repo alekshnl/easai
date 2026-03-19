@@ -41,14 +41,29 @@ function isChatGptToken(token: string): boolean {
   return !token.startsWith("sk-") && token.split(".").length === 3;
 }
 
-function buildInstructions(workspaceFolder?: string): string {
+function buildInstructions(workspaceFolder?: string, mode?: string): string {
   let instructions = "You are a helpful coding assistant. Be concise and direct.\n\n";
   instructions += "You have access to tools that let you interact with the local filesystem, run commands, and search the web. ";
   instructions += "Use them proactively when the user asks about files, code, or anything that requires accessing local data.\n\n";
   instructions += "When listing or reading files, prefer the specialized tools (list, read, glob, grep) over bash commands.\n";
   instructions += "When editing files, use the edit tool for targeted changes and write for creating new files.\n";
+  instructions += "When you include code in responses, always use fenced markdown code blocks with an explicit language (for example ```ts or ```bash).\n";
   if (workspaceFolder) {
     instructions += `\nThe current workspace folder is: ${workspaceFolder}\n`;
+  }
+  if (mode === "plan") {
+    instructions += "\n## Mode: Plan\n";
+    instructions += "You are in PLAN mode. Do NOT write code, edit files, or execute commands.\n";
+    instructions += "Instead, think through the problem and provide a detailed plan with:\n";
+    instructions += "- What files need to be created or modified\n";
+    instructions += "- What changes need to be made in each file\n";
+    instructions += "- The order of operations\n";
+    instructions += "- Any potential risks or edge cases\n";
+    instructions += "Be thorough but concise. When the user switches to Build mode, you will execute the plan.\n";
+  } else {
+    instructions += "\n## Mode: Build\n";
+    instructions += "You are in BUILD mode. Execute the task: write code, edit files, run commands as needed.\n";
+    instructions += "Be proactive — use tools to explore the codebase, make changes, and verify your work.\n";
   }
   return instructions;
 }
@@ -189,6 +204,7 @@ export async function* streamChat(
   modelId: string,
   reasoningEffort: ReasoningEffort = "medium",
   workspaceFolder?: string,
+  mode?: string,
 ): AsyncGenerator<StreamEvent> {
   const modelDef = getModelById(modelId);
   if (!modelDef) {
@@ -197,7 +213,7 @@ export async function* streamChat(
   }
 
   const tools = TOOL_DEFINITIONS;
-  const instructions = buildInstructions(workspaceFolder);
+  const instructions = buildInstructions(workspaceFolder, mode);
 
   const input: Array<Record<string, unknown>> = [
     ...messages.map((m) => ({ role: m.role, content: m.content })),

@@ -13,7 +13,7 @@ import {
   DropdownMenuGroup,
 } from "@/components/ui/dropdown-menu";
 import { QuickActions } from "./quick-actions";
-import { ArrowUp, ChevronDown, Loader2 } from "lucide-react";
+import { ArrowUp, ChevronDown, Loader2, Lightbulb, Hammer } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Account } from "@/hooks/use-accounts";
 import { OPENAI_MODELS } from "@/lib/openai/models";
@@ -27,6 +27,8 @@ interface PromptInputProps {
   selectedModel: string | null;
   reasoningEffort: string;
   onReasoningEffortChange: (effort: string) => void;
+  mode: "plan" | "build";
+  onModeChange: (mode: "plan" | "build") => void;
   accounts: Account[];
   onAccountChange: (accountId: string, model: string) => void;
   disabled?: boolean;
@@ -43,6 +45,8 @@ export function PromptInput({
   selectedModel,
   reasoningEffort,
   onReasoningEffortChange,
+  mode,
+  onModeChange,
   accounts,
   onAccountChange,
   disabled,
@@ -68,7 +72,6 @@ export function PromptInput({
 
   const selectedAccount = accounts.find((a) => a.id === selectedAccountId);
   const selectedModelDef = OPENAI_MODELS.find((m) => m.id === selectedModel);
-  const modelSupportsReasoning = selectedModelDef?.supportsReasoning ?? false;
 
   const selectorLabel =
     selectedAccount && selectedModelDef
@@ -114,8 +117,25 @@ export function PromptInput({
 
       {/* Bottom bar: model selector + reasoning effort */}
       <div className="flex items-center justify-between gap-2">
-        {/* Model selector */}
-        <DropdownMenu>
+        {/* Left: mode toggle + model selector */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => onModeChange(mode === "plan" ? "build" : "plan")}
+            className={cn(
+              "flex items-center gap-1 rounded px-2 py-0.5 font-mono text-[10px] transition-colors",
+              mode === "plan"
+                ? "bg-amber-500/10 text-amber-500 font-medium"
+                : "bg-primary/10 text-primary font-medium"
+            )}
+          >
+            {mode === "plan" ? (
+              <><Lightbulb className="h-3 w-3" /> Plan</>
+            ) : (
+              <><Hammer className="h-3 w-3" /> Build</>
+            )}
+          </button>
+
+          <DropdownMenu>
         <DropdownMenuTrigger
           className="flex h-6 items-center gap-1 rounded px-2 font-mono text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
@@ -156,27 +176,26 @@ export function PromptInput({
               ))
             )}
           </DropdownMenuContent>
-        </DropdownMenu>
+          </DropdownMenu>
+        </div>
 
-        {/* Reasoning effort (only for models that support it) */}
-        {modelSupportsReasoning && (
-          <div className="flex items-center gap-1">
-            {REASONING_EFFORTS.map((effort) => (
-              <button
-                key={effort}
-                onClick={() => onReasoningEffortChange(effort)}
-                className={cn(
-                  "rounded px-2 py-0.5 font-mono text-[10px] transition-colors",
-                  reasoningEffort === effort
-                    ? "bg-primary/10 text-primary font-medium"
-                    : "text-muted-foreground/50 hover:text-muted-foreground"
-                )}
-              >
-                {effort}
-              </button>
-            ))}
-          </div>
-        )}
+        {/* Reasoning effort */}
+        <div className="flex items-center gap-1">
+          {REASONING_EFFORTS.map((effort) => (
+            <button
+              key={effort}
+              onClick={() => onReasoningEffortChange(effort)}
+              className={cn(
+                "rounded px-2 py-0.5 font-mono text-[10px] transition-colors",
+                reasoningEffort === effort
+                  ? "bg-primary/10 text-primary font-medium"
+                  : "text-muted-foreground/50 hover:text-muted-foreground"
+              )}
+            >
+              {effort}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );

@@ -60,7 +60,8 @@ export function useChat(sessionId: string | null) {
       content: string,
       accountId: string,
       model: string,
-      reasoningEffort: string = "medium"
+      reasoningEffort: string = "medium",
+      mode: string = "build",
     ) => {
       if (!sessionId || streaming) return;
 
@@ -91,6 +92,7 @@ export function useChat(sessionId: string | null) {
             accountId,
             model,
             reasoningEffort,
+            mode,
           }),
         });
 

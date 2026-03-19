@@ -13,6 +13,7 @@ export async function POST(request: NextRequest) {
     accountId,
     model,
     reasoningEffort = "medium",
+    mode = "build",
   } = body;
 
   if (!sessionId || !content || !accountId || !model) {
@@ -86,6 +87,7 @@ export async function POST(request: NextRequest) {
           model,
           reasoningEffort as ReasoningEffort,
           workspaceFolder,
+          mode,
         )) {
           if (event.type === "text_delta" && event.content) {
             fullContent += event.content;

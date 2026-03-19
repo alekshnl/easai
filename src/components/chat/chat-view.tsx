@@ -26,6 +26,7 @@ export function ChatView({
 }: ChatViewProps) {
   const [prompt, setPrompt] = useState("");
   const [reasoningEffort, setReasoningEffort] = useState("medium");
+  const [mode, setMode] = useState<"plan" | "build">("build");
 
   const {
     messages,
@@ -42,7 +43,7 @@ export function ChatView({
     const content = prompt.trim();
     setPrompt("");
 
-    await sendMessage(content, selectedAccountId, selectedModel, reasoningEffort);
+    await sendMessage(content, selectedAccountId, selectedModel, reasoningEffort, mode);
     onSessionUpdate?.();
   }, [
     prompt,
@@ -50,6 +51,7 @@ export function ChatView({
     selectedAccountId,
     selectedModel,
     reasoningEffort,
+    mode,
     sendMessage,
     onSessionUpdate,
   ]);
@@ -82,6 +84,8 @@ export function ChatView({
         selectedModel={selectedModel}
         reasoningEffort={reasoningEffort}
         onReasoningEffortChange={setReasoningEffort}
+        mode={mode}
+        onModeChange={setMode}
         accounts={accounts}
         onAccountChange={onAccountModelChange}
         disabled={!session}
