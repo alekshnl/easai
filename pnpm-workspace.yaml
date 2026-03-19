@@ -1,3 +1,4 @@
+approveBuilds: better-sqlite3
 ignoredBuiltDependencies:
   - sharp
   - unrs-resolver

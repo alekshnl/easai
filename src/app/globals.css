@@ -127,3 +127,15 @@
     @apply font-sans;
   }
 }
+/* Monospace as default font */
+@layer base {
+  body {
+    font-family: var(--font-geist-mono), ui-monospace, "Courier New", monospace;
+  }
+
+  /* Slim scrollbars */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: oklch(0.5 0 0 / 20%); border-radius: 2px; }
+  ::-webkit-scrollbar-thumb:hover { background: oklch(0.5 0 0 / 40%); }
+}
