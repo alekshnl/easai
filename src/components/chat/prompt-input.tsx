@@ -3,20 +3,11 @@
 import React, { useRef, useEffect, KeyboardEvent } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-  DropdownMenuLabel,
-  DropdownMenuGroup,
-} from "@/components/ui/dropdown-menu";
 import { QuickActions } from "./quick-actions";
-import { ArrowUp, ChevronDown, Loader2, Lightbulb, Hammer } from "lucide-react";
+import { ArrowUp, Loader2, Lightbulb, Hammer } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Account } from "@/hooks/use-accounts";
-import { OPENAI_MODELS } from "@/lib/openai/models";
+import { getModelById } from "@/lib/models";
 
 interface PromptInputProps {
   value: string;
@@ -71,12 +62,8 @@ export function PromptInput({
   };
 
   const selectedAccount = accounts.find((a) => a.id === selectedAccountId);
-  const selectedModelDef = OPENAI_MODELS.find((m) => m.id === selectedModel);
-
-  const selectorLabel =
-    selectedAccount && selectedModelDef
-      ? `${selectedModelDef.name}`
-      : "Selecteer model";
+  const selectedModelDef = getModelById(selectedModel || "");
+  const modelLabel = selectedModelDef?.name || "Selecteer model";
 
   return (
     <div className="flex flex-col gap-2 border-t border-border/40 bg-background/80 px-4 pb-4 pt-3 backdrop-blur-sm">
@@ -135,48 +122,9 @@ export function PromptInput({
             )}
           </button>
 
-          <DropdownMenu>
-        <DropdownMenuTrigger
-          className="flex h-6 items-center gap-1 rounded px-2 font-mono text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          {selectorLabel}
-          <ChevronDown className="h-3 w-3" />
-        </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="min-w-[220px]">
-            {accounts.length === 0 ? (
-              <div className="px-3 py-2 font-mono text-xs text-muted-foreground">
-                Geen accounts — voeg een account toe in de sidebar
-              </div>
-            ) : (
-              accounts.map((account) => (
-                <DropdownMenuGroup key={account.id}>
-                  <DropdownMenuLabel className="font-mono text-xs text-muted-foreground">
-                    {account.name}
-                  </DropdownMenuLabel>
-                  {OPENAI_MODELS.map((model) => (
-                    <DropdownMenuItem
-                      key={model.id}
-                      className="font-mono text-xs"
-                      onClick={() => onAccountChange(account.id, model.id)}
-                    >
-                      <span
-                        className={cn(
-                          "mr-2 h-1.5 w-1.5 rounded-full",
-                          selectedAccountId === account.id &&
-                            selectedModel === model.id
-                            ? "bg-primary"
-                            : "bg-transparent"
-                        )}
-                      />
-                      {model.name}
-                    </DropdownMenuItem>
-                  ))}
-                  <DropdownMenuSeparator />
-                </DropdownMenuGroup>
-              ))
-            )}
-          </DropdownMenuContent>
-          </DropdownMenu>
+          <span className="font-mono text-xs text-muted-foreground/50">
+            {modelLabel}
+          </span>
         </div>
 
         {/* Reasoning effort */}

@@ -12,8 +12,14 @@ import {
   DropdownMenuGroup,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Settings, Plus, ChevronDown, RefreshCw } from "lucide-react";
-import { OPENAI_MODELS } from "@/lib/openai/models";
+import { getModelsForProvider, MODELS } from "@/lib/models";
 import type { Account } from "@/hooks/use-accounts";
 import type { AccountUsage } from "@/hooks/use-account-usage";
 
@@ -23,8 +29,10 @@ interface TopbarProps {
   selectedModel: string | null;
   usageMap: Record<string, AccountUsage>;
   onAccountModelChange: (accountId: string, model: string) => void;
-  onAddAccount: () => void;
+  onAddAccount: (provider: string) => void;
   onDeleteAccount: (id: string) => void;
+  onLinkApiKey: (accountId: string) => void;
+  onRenameAccount: (accountId: string, name: string) => void;
   onOpenSettings: () => void;
   onFetchAllUsage: () => void;
   onRefetchAccountUsage: (accountId: string) => void;
@@ -81,6 +89,8 @@ function AccountDropdown({
   onAccountModelChange,
   onDeleteAccount,
   onRefetchUsage,
+  onLinkApiKey,
+  onRenameAccount,
 }: {
   account: Account;
   isActive: boolean;
@@ -89,8 +99,21 @@ function AccountDropdown({
   onAccountModelChange: (accountId: string, model: string) => void;
   onDeleteAccount: (id: string) => void;
   onRefetchUsage: (accountId: string) => void;
+  onLinkApiKey: (accountId: string) => void;
+  onRenameAccount: (accountId: string, name: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [renameValue, setRenameValue] = useState(account.name);
+  const models = getModelsForProvider(account.provider);
+
+  const handleRename = () => {
+    const trimmed = renameValue.trim();
+    if (trimmed && trimmed !== account.name) {
+      onRenameAccount(account.id, trimmed);
+    }
+    setRenameOpen(false);
+  };
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
@@ -118,7 +141,10 @@ function AccountDropdown({
       >
         <DropdownMenuGroup>
           <div className="flex items-center justify-between px-2 py-1.5">
-            <DropdownMenuLabel className="text-xs font-normal text-muted-foreground p-0">
+            <DropdownMenuLabel
+              className="text-xs font-normal text-muted-foreground p-0 cursor-pointer hover:text-foreground transition-colors"
+              onDoubleClick={() => { setRenameValue(account.name); setRenameOpen(true); }}
+            >
               {account.name}
             </DropdownMenuLabel>
             <button
@@ -163,7 +189,7 @@ function AccountDropdown({
             Model
           </DropdownMenuLabel>
 
-          {OPENAI_MODELS.map((model) => {
+          {models.map((model) => {
             const isSelected = isActive && selectedModel === model.id;
             return (
               <DropdownMenuItem
@@ -195,6 +221,75 @@ function AccountDropdown({
         >
           Verwijder account
         </DropdownMenuItem>
+
+        {account.provider === "zai" && !account.apiKey && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="gap-2 text-xs text-primary cursor-pointer"
+              onClick={() => { onLinkApiKey(account.id); setOpen(false); }}
+            >
+              API key koppelen
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+      <Dialog open={renameOpen} onOpenChange={(v) => { if (!v) setRenameOpen(false); }}>
+        <DialogContent className="max-w-xs font-mono">
+          <DialogHeader>
+            <DialogTitle className="font-mono text-sm">Naam wijzigen</DialogTitle>
+          </DialogHeader>
+          <input
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleRename()}
+            className="w-full rounded-md border border-border bg-muted/30 px-3 py-2 font-mono text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
+            autoFocus
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" size="sm" className="font-mono text-xs" onClick={() => setRenameOpen(false)}>Annuleren</Button>
+            <Button size="sm" className="font-mono text-xs" onClick={handleRename}>Opslaan</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </DropdownMenu>
+  );
+}
+
+function AddAccountDropdown({ onAddAccount }: { onAddAccount: (provider: string) => void }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger
+        onMouseEnter={() => setOpen(true)}
+        className="flex items-center justify-center h-6 w-6 text-muted-foreground/40 hover:text-muted-foreground/70 rounded-md transition-colors"
+      >
+        <Plus className="h-3 w-3" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="start"
+        className="font-mono"
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+      >
+        <DropdownMenuGroup>
+          <DropdownMenuLabel className="text-[10px] uppercase tracking-widest text-muted-foreground/40">
+            Account toevoegen
+          </DropdownMenuLabel>
+          <DropdownMenuItem
+            className="gap-2 text-xs cursor-pointer"
+            onClick={() => { onAddAccount("openai"); setOpen(false); }}
+          >
+            <span>OpenAI</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="gap-2 text-xs cursor-pointer"
+            onClick={() => { onAddAccount("zai"); setOpen(false); }}
+          >
+            <span>Z.AI Coding Plan</span>
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -211,9 +306,11 @@ export function Topbar({
   onOpenSettings,
   onFetchAllUsage,
   onRefetchAccountUsage,
+  onLinkApiKey,
+  onRenameAccount,
 }: TopbarProps) {
   const activeModel = selectedModel
-    ? OPENAI_MODELS.find((m) => m.id === selectedModel)
+    ? MODELS.find((m) => m.id === selectedModel)
     : null;
 
   return (
@@ -229,17 +326,12 @@ export function Topbar({
             onAccountModelChange={onAccountModelChange}
             onDeleteAccount={onDeleteAccount}
             onRefetchUsage={onRefetchAccountUsage}
+            onLinkApiKey={onLinkApiKey}
+            onRenameAccount={onRenameAccount}
           />
         ))}
 
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6 text-muted-foreground/40 hover:text-muted-foreground/70"
-          onClick={onAddAccount}
-        >
-          <Plus className="h-3 w-3" />
-        </Button>
+        <AddAccountDropdown onAddAccount={onAddAccount} />
       </div>
 
       <div className="flex items-center gap-3">

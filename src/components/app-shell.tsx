@@ -6,6 +6,7 @@ import { Topbar } from "@/components/topbar/topbar";
 import { SettingsDialog } from "@/components/settings/settings-dialog";
 import { CreateProjectDialog } from "@/components/projects/create-project-dialog";
 import { OAuthWaitDialog } from "@/components/auth/oauth-wait-dialog";
+import { ZaiApiKeyDialog } from "@/components/auth/zai-api-key-dialog";
 import { useAccounts } from "@/hooks/use-accounts";
 import { useSessions } from "@/hooks/use-sessions";
 import { useProjects } from "@/hooks/use-projects";
@@ -54,6 +55,8 @@ function AppShellInner() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
   const [oauthWaiting, setOauthWaiting] = useState(false);
+  const [zaiApiKeyOpen, setZaiApiKeyOpen] = useState(false);
+  const [zaiApiKeyId, setZaiApiKeyId] = useState<string | null>(null);
   const oauthCleanupRef = useRef<(() => void) | null>(null);
 
   const accountIds = accounts.map((a) => a.id);
@@ -212,9 +215,10 @@ function AppShellInner() {
     [deleteProject, selectedProject]
   );
 
-  const handleAddAccount = useCallback(() => {
+  const handleAddAccount = useCallback((provider: string) => {
     setOauthWaiting(true);
     const cleanup = startOAuth(
+      provider,
       () => {},
       (email, planType) => {
         setOauthWaiting(false);
@@ -227,6 +231,23 @@ function AppShellInner() {
     );
     oauthCleanupRef.current = cleanup;
   }, [startOAuth]);
+
+  const handleLinkApiKey = useCallback((accountId: string) => {
+    setZaiApiKeyId(accountId);
+    setZaiApiKeyOpen(true);
+  }, []);
+
+  const handleZaiApiKeyDone = useCallback(async () => {
+    setZaiApiKeyOpen(false);
+    const id = zaiApiKeyId;
+    if (id) {
+      await fetchAccounts();
+      toast.success("API key gekoppeld");
+    } else {
+      await fetchAccounts();
+      toast.success("Z.AI account toegevoegd");
+    }
+  }, [fetchAccounts, zaiApiKeyId]);
 
   const currentWorkspace = selectedProject?.workspaceFolder ?? null;
 
@@ -243,6 +264,16 @@ function AppShellInner() {
           onOpenSettings={() => setSettingsOpen(true)}
           onFetchAllUsage={fetchAll}
           onRefetchAccountUsage={refetchAccount}
+          onLinkApiKey={handleLinkApiKey}
+          onRenameAccount={async (accountId, name) => {
+            await fetch(`/api/accounts`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ id: accountId, name }),
+            });
+            await fetchAccounts();
+            toast.success("Naam gewijzigd");
+          }}
         />
 
         <ResizableLayout
@@ -268,6 +299,8 @@ function AppShellInner() {
           handleAccountModelChange={handleAccountModelChange}
           fetchSessions={fetchSessions}
         />
+        <OAuthWaitDialog open={oauthWaiting} onCancel={() => { setOauthWaiting(false); oauthCleanupRef.current?.(); }} />
+        <ZaiApiKeyDialog open={zaiApiKeyOpen} accountId={zaiApiKeyId} onClose={() => setZaiApiKeyOpen(false)} onDone={handleZaiApiKeyDone} />
       </div>
   );
 }

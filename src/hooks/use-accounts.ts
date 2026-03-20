@@ -8,6 +8,7 @@ export interface Account {
   provider: string;
   authType: string;
   planType: string | null;
+  apiKey: string | null;
   createdAt: number;
 }
 
@@ -47,11 +48,13 @@ export function useAccounts() {
 
   const startOAuth = useCallback(
     (
+      provider: string = "openai",
       onUrl?: (url: string) => void,
       onDone?: (email: string, planType: string) => void,
       onError?: (error: string) => void
     ) => {
-      const evtSource = new EventSource("/api/auth/start");
+      const endpoint = provider === "zai" ? "/api/auth/zai/start" : "/api/auth/start";
+      const evtSource = new EventSource(endpoint);
 
       evtSource.onmessage = (e) => {
         try {

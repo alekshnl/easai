@@ -33,16 +33,34 @@ function parseResponse(data: Record<string, unknown>): Omit<AccountUsage, "refre
   const primarySeconds = (primary.resetAfterSeconds as number) ?? null;
   const secondarySeconds = (secondary.resetAfterSeconds as number) ?? null;
 
+  let primaryResetAt: Date | null = null;
+  if (primarySeconds) {
+    primaryResetAt = new Date(Date.now() + primarySeconds * 1000);
+  } else if (typeof primary.resetAt === "string") {
+    primaryResetAt = new Date(primary.resetAt);
+  } else if (primary.resetAt instanceof Date) {
+    primaryResetAt = primary.resetAt;
+  }
+
+  let secondaryResetAt: Date | null = null;
+  if (secondarySeconds) {
+    secondaryResetAt = new Date(Date.now() + secondarySeconds * 1000);
+  } else if (typeof secondary.resetAt === "string") {
+    secondaryResetAt = new Date(secondary.resetAt);
+  } else if (secondary.resetAt instanceof Date) {
+    secondaryResetAt = secondary.resetAt;
+  }
+
   return {
     primary: {
       usedPercent: (primary.usedPercent as number) ?? null,
       resetAfterSeconds: primarySeconds,
-      resetAt: primarySeconds ? new Date(Date.now() + primarySeconds * 1000) : null,
+      resetAt: primaryResetAt,
     },
     secondary: {
       usedPercent: (secondary.usedPercent as number) ?? null,
       resetAfterSeconds: secondarySeconds,
-      resetAt: secondarySeconds ? new Date(Date.now() + secondarySeconds * 1000) : null,
+      resetAt: secondaryResetAt,
     },
     fetchedAt: Date.now(),
     error: null,
