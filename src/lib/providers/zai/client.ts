@@ -30,6 +30,7 @@ export interface ToolCallRecord {
   name: string;
   arguments: string;
   result: string;
+  workerId?: string;
 }
 
 const ZAI_BASE_URL = "https://api.z.ai/api/coding/paas/v4/chat/completions";

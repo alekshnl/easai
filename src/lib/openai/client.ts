@@ -30,6 +30,7 @@ export interface ToolCallRecord {
   name: string;
   arguments: string;
   result: string;
+  workerId?: string;
 }
 
 export type ReasoningEffort = "low" | "medium" | "high" | "xhigh";

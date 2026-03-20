@@ -84,6 +84,27 @@ export async function POST(request: NextRequest) {
     async start(controller) {
       let fullContent = "";
       const toolCalls: ToolCallRecord[] = [];
+      let workerCounter = 0;
+      const workerIds = new Map<string, string>();
+
+      const getWorkerLetter = (n: number): string => {
+        const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        if (n < 26) return letters[n];
+        const first = Math.floor(n / 26) - 1;
+        const second = n % 26;
+        return letters[first] + letters[second];
+      };
+
+      const assignWorkerId = (toolCallId: string, toolName: string): string => {
+        if (toolName === "task") {
+          const workerId = getWorkerLetter(workerCounter);
+          workerCounter++;
+          workerIds.set(toolCallId, workerId);
+          return workerId;
+        }
+        workerIds.set(toolCallId, "Main");
+        return "Main";
+      };
 
       try {
         const streamFn = account.provider === "zai"
@@ -99,6 +120,7 @@ export async function POST(request: NextRequest) {
               )
             );
           } else if (event.type === "tool_call_start") {
+            const workerId = assignWorkerId(event.toolCallId || "", event.toolName || "");
             controller.enqueue(
               encoder.encode(
                 `data: ${JSON.stringify({
@@ -106,15 +128,18 @@ export async function POST(request: NextRequest) {
                   toolCallId: event.toolCallId,
                   toolName: event.toolName,
                   toolArguments: event.toolArguments,
+                  workerId,
                 })}\n\n`
               )
             );
           } else if (event.type === "tool_result") {
+            const workerId = workerIds.get(event.toolCallId || "") || "Main";
             toolCalls.push({
               id: event.toolCallId || "",
               name: event.toolName || "",
               arguments: "",
               result: event.toolResult || "",
+              workerId,
             });
             controller.enqueue(
               encoder.encode(
@@ -123,6 +148,7 @@ export async function POST(request: NextRequest) {
                   toolCallId: event.toolCallId,
                   toolName: event.toolName,
                   toolResult: event.toolResult,
+                  workerId,
                 })}\n\n`
               )
             );
@@ -142,6 +168,7 @@ export async function POST(request: NextRequest) {
                 id: tc.id,
                 name: tc.name,
                 result: tc.result?.slice(0, 500),
+                workerId: tc.workerId || "Main",
               }));
             }
 

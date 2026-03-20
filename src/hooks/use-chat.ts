@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import type { ToolCallDisplayData } from "@/components/chat/tool-call-display";
+import type { ToolCallDisplayData } from "@/components/chat/actions-panel";
 
 export interface Message {
   id: string;
@@ -133,6 +133,7 @@ export function useChat(sessionId: string | null, onComplete?: () => void) {
                   name: event.toolName || "unknown",
                   arguments: event.toolArguments || "{}",
                   status: "running",
+                  workerId: event.workerId || "Main",
                 };
                 currentToolCalls.push(tc);
                 setActiveToolCalls([...currentToolCalls]);
@@ -144,6 +145,7 @@ export function useChat(sessionId: string | null, onComplete?: () => void) {
                     ...currentToolCalls[idx],
                     result: event.toolResult,
                     status: event.toolResult?.startsWith("Error:") ? "error" : "completed",
+                    workerId: event.workerId || currentToolCalls[idx].workerId,
                   };
                   setActiveToolCalls([...currentToolCalls]);
                 }

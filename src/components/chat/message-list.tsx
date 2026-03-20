@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useCallback } from "react";
 import { MessageBubble, StreamingBubble } from "./message-bubble";
 import type { Message } from "@/hooks/use-chat";
-import type { ToolCallDisplayData } from "./tool-call-display";
+import type { ToolCallDisplayData } from "./actions-panel";
 
 interface MessageListProps {
   messages: Message[];

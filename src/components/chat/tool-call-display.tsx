@@ -89,6 +89,7 @@ export interface ToolCallDisplayData {
   result?: string;
   status: "running" | "completed" | "error";
   error?: string;
+  workerId?: string;
 }
 
 interface ToolCallDisplayProps {

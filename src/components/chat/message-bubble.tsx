@@ -3,7 +3,7 @@
 import React, { useMemo } from "react";
 import { Markdown } from "./markdown";
 import { cn } from "@/lib/utils";
-import { ToolCallList, type ToolCallDisplayData } from "./tool-call-display";
+import { ActionsPanel, type ToolCallDisplayData } from "./actions-panel";
 import type { Message } from "@/hooks/use-chat";
 
 interface MessageBubbleProps {
@@ -22,6 +22,7 @@ function parsePersistedToolCalls(metadata: string | null | undefined): ToolCallD
       arguments: "",
       result: tc.result ? String(tc.result) : undefined,
       status: "completed" as const,
+      workerId: tc.workerId ? String(tc.workerId) : "Main",
     }));
   } catch {
     return [];
@@ -31,6 +32,8 @@ function parsePersistedToolCalls(metadata: string | null | undefined): ToolCallD
 export function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === "user";
   const toolCalls = useMemo(() => parsePersistedToolCalls(message.metadata), [message.metadata]);
+  const hasActions = toolCalls.length > 0;
+  
   const messageMode = useMemo(() => {
     if (!message.metadata) return "build";
     try {
@@ -58,8 +61,8 @@ export function MessageBubble({ message }: MessageBubbleProps) {
 
       <div
         className={cn(
-          "max-w-[85%] min-w-0",
-          isUser ? "items-end" : "items-start"
+          "flex gap-4 min-w-0",
+          hasActions ? "w-full" : "max-w-[85%]"
         )}
       >
         {isUser ? (
@@ -67,16 +70,29 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             {message.content}
           </div>
         ) : (
-          <div className="max-w-none font-mono text-xs leading-relaxed text-foreground">
-            <Markdown text={message.content} />
-            {toolCalls.length > 0 && <ToolCallList toolCalls={toolCalls} />}
-          </div>
-        )}
+          <>
+            <div className={cn(
+              "min-w-0",
+              hasActions ? "w-2/3" : "max-w-[85%]"
+            )}>
+              <div className="max-w-none font-mono text-xs leading-relaxed text-foreground">
+                <Markdown text={message.content} />
+              </div>
+              {!isUser && message.model && (
+                <div className="mt-1 text-[9px] text-muted-foreground/50 font-mono">
+                  {message.model}
+                </div>
+              )}
+            </div>
 
-        {!isUser && message.model && (
-          <div className="mt-1 text-[9px] text-muted-foreground/50 font-mono">
-            {message.model}
-          </div>
+            {hasActions && (
+              <div className="w-1/3 shrink-0 self-start">
+                <div className="sticky top-2">
+                  <ActionsPanel toolCalls={toolCalls} />
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -91,20 +107,36 @@ interface StreamingBubbleProps {
 
 export function StreamingBubble({ content, activeToolCalls, mode }: StreamingBubbleProps) {
   const accentColor = mode === "plan" ? "bg-amber-500/60" : "bg-blue-500/60";
+  const hasActions = activeToolCalls.length > 0;
   
   return (
     <div className="group flex w-full gap-3 px-4 py-3">
       <div className={cn("mt-1 h-2 w-2 shrink-0 rounded-full animate-pulse", accentColor)} />
 
-      <div className="max-w-[85%] min-w-0">
-        <div className="max-w-none font-mono text-xs leading-relaxed text-foreground">
-          {content ? (
-            <Markdown text={content} />
-          ) : activeToolCalls.length > 0 ? null : (
-            <span className="animate-pulse text-muted-foreground">▋</span>
-          )}
-          {activeToolCalls.length > 0 && <ToolCallList toolCalls={activeToolCalls} />}
+      <div className={cn(
+        "flex gap-4 min-w-0",
+        hasActions ? "w-full" : "max-w-[85%]"
+      )}>
+        <div className={cn(
+          "min-w-0",
+          hasActions ? "w-2/3" : "max-w-[85%]"
+        )}>
+          <div className="max-w-none font-mono text-xs leading-relaxed text-foreground">
+            {content ? (
+              <Markdown text={content} />
+            ) : !hasActions ? (
+              <span className="animate-pulse text-muted-foreground">▋</span>
+            ) : null}
+          </div>
         </div>
+
+        {hasActions && (
+          <div className="w-1/3 shrink-0 self-start">
+            <div className="sticky top-2">
+              <ActionsPanel toolCalls={activeToolCalls} />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
