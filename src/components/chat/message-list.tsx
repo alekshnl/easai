@@ -11,6 +11,7 @@ interface MessageListProps {
   streamingContent: string;
   activeToolCalls: ToolCallDisplayData[];
   error: string | null;
+  mode: "plan" | "build";
 }
 
 export function MessageList({
@@ -19,6 +20,7 @@ export function MessageList({
   streamingContent,
   activeToolCalls,
   error,
+  mode,
 }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -73,6 +75,7 @@ export function MessageList({
           <StreamingBubble
             content={streamingContent}
             activeToolCalls={activeToolCalls}
+            mode={mode}
           />
         )}
         {error && (

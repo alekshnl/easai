@@ -51,6 +51,7 @@ function AppShellInner() {
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
+  const [mode, setMode] = useState<"plan" | "build">("build");
   const [initialized, setInitialized] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
@@ -258,6 +259,7 @@ function AppShellInner() {
           selectedAccountId={selectedAccountId}
           selectedModel={selectedModel}
           usageMap={usageMap}
+          mode={mode}
           onAccountModelChange={handleAccountModelChange}
           onAddAccount={handleAddAccount}
           onDeleteAccount={handleDeleteAccount}
@@ -298,6 +300,8 @@ function AppShellInner() {
           handleDeleteProject={handleDeleteProject}
           handleAccountModelChange={handleAccountModelChange}
           fetchSessions={fetchSessions}
+          mode={mode}
+          onModeChange={setMode}
         />
         <OAuthWaitDialog open={oauthWaiting} onCancel={() => { setOauthWaiting(false); oauthCleanupRef.current?.(); }} />
         <ZaiApiKeyDialog open={zaiApiKeyOpen} accountId={zaiApiKeyId} onClose={() => setZaiApiKeyOpen(false)} onDone={handleZaiApiKeyDone} />

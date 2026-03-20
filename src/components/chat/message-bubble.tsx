@@ -31,6 +31,16 @@ function parsePersistedToolCalls(metadata: string | null | undefined): ToolCallD
 export function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === "user";
   const toolCalls = useMemo(() => parsePersistedToolCalls(message.metadata), [message.metadata]);
+  const messageMode = useMemo(() => {
+    if (!message.metadata) return "build";
+    try {
+      const parsed = JSON.parse(message.metadata);
+      return parsed.mode || "build";
+    } catch {
+      return "build";
+    }
+  }, [message.metadata]);
+  const accentColor = messageMode === "plan" ? "bg-amber-500/60" : "bg-blue-500/60";
 
   return (
     <div
@@ -42,7 +52,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       <div
         className={cn(
           "mt-1 h-2 w-2 shrink-0 rounded-full",
-          isUser ? "bg-primary/60" : "bg-muted-foreground/40"
+          isUser ? "bg-primary/60" : accentColor
         )}
       />
 
@@ -53,18 +63,18 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         )}
       >
         {isUser ? (
-          <div className="rounded-lg bg-primary/10 px-4 py-2.5 font-mono text-sm leading-relaxed text-foreground">
+          <div className="rounded-lg bg-primary/10 px-4 py-2.5 font-mono text-xs leading-relaxed text-foreground">
             {message.content}
           </div>
         ) : (
-          <div className="max-w-none font-mono text-sm leading-relaxed text-foreground">
+          <div className="max-w-none font-mono text-xs leading-relaxed text-foreground">
             <Markdown text={message.content} />
             {toolCalls.length > 0 && <ToolCallList toolCalls={toolCalls} />}
           </div>
         )}
 
         {!isUser && message.model && (
-          <div className="mt-1 text-[10px] text-muted-foreground/50 font-mono">
+          <div className="mt-1 text-[9px] text-muted-foreground/50 font-mono">
             {message.model}
           </div>
         )}
@@ -76,15 +86,18 @@ export function MessageBubble({ message }: MessageBubbleProps) {
 interface StreamingBubbleProps {
   content: string;
   activeToolCalls: ToolCallDisplayData[];
+  mode: "plan" | "build";
 }
 
-export function StreamingBubble({ content, activeToolCalls }: StreamingBubbleProps) {
+export function StreamingBubble({ content, activeToolCalls, mode }: StreamingBubbleProps) {
+  const accentColor = mode === "plan" ? "bg-amber-500/60" : "bg-blue-500/60";
+  
   return (
     <div className="group flex w-full gap-3 px-4 py-3">
-      <div className="mt-1 h-2 w-2 shrink-0 rounded-full bg-muted-foreground/40 animate-pulse" />
+      <div className={cn("mt-1 h-2 w-2 shrink-0 rounded-full animate-pulse", accentColor)} />
 
       <div className="max-w-[85%] min-w-0">
-        <div className="max-w-none font-mono text-sm leading-relaxed text-foreground">
+        <div className="max-w-none font-mono text-xs leading-relaxed text-foreground">
           {content ? (
             <Markdown text={content} />
           ) : activeToolCalls.length > 0 ? null : (

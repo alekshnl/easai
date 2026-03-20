@@ -20,7 +20,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Settings, Plus, ChevronDown, RefreshCw } from "lucide-react";
-import { getModelsForProvider, MODELS } from "@/lib/models";
+import { getModelsForProvider } from "@/lib/models";
 import type { Account } from "@/hooks/use-accounts";
 import type { AccountUsage } from "@/hooks/use-account-usage";
 
@@ -29,6 +29,7 @@ interface TopbarProps {
   selectedAccountId: string | null;
   selectedModel: string | null;
   usageMap: Record<string, AccountUsage>;
+  mode: "plan" | "build";
   onAccountModelChange: (accountId: string, model: string) => void;
   onAddAccount: (provider: string) => void;
   onDeleteAccount: (id: string) => void;
@@ -94,6 +95,7 @@ function AccountDropdown({
   onRefetchUsage,
   onLinkApiKey,
   onRenameAccount,
+  mode,
 }: {
   account: Account;
   isActive: boolean;
@@ -106,6 +108,7 @@ function AccountDropdown({
   onRefetchUsage: (accountId: string) => void;
   onLinkApiKey: (accountId: string) => void;
   onRenameAccount: (accountId: string, name: string) => void;
+  mode: "plan" | "build";
 }) {
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -139,7 +142,9 @@ function AccountDropdown({
       >
         <div className={cn(
           "h-1.5 w-1.5 rounded-full shrink-0",
-          isActive ? "bg-primary" : "bg-muted-foreground/30"
+          isActive
+            ? mode === "plan" ? "bg-amber-500" : "bg-blue-500"
+            : "bg-muted-foreground/30"
         )} />
         <span className="truncate max-w-[200px]">{account.name}</span>
         <ChevronDown className="h-3 w-3 text-muted-foreground/50 shrink-0" />
@@ -327,6 +332,7 @@ export function Topbar({
   selectedAccountId,
   selectedModel,
   usageMap,
+  mode,
   onAccountModelChange,
   onAddAccount,
   onDeleteAccount,
@@ -336,10 +342,6 @@ export function Topbar({
   onLinkApiKey,
   onRenameAccount,
 }: TopbarProps) {
-  const activeModel = selectedModel
-    ? MODELS.find((m) => m.id === selectedModel)
-    : null;
-
   const [openAccountId, setOpenAccountId] = useState<string | null>(null);
 
   const handleOpenChange = useCallback((accountId: string, open: boolean) => {
@@ -349,7 +351,7 @@ export function Topbar({
   return (
     <div className="flex items-center justify-between border-b border-border/30 px-3 py-1.5">
       <div className="flex items-center gap-1">
-        <div className="font-mono text-sm font-semibold tracking-wider text-foreground/80 mr-2">
+        <div className="font-mono text-base font-semibold tracking-wider text-foreground/80 mr-3">
           easai
         </div>
         {accounts.map((account) => (
@@ -366,6 +368,7 @@ export function Topbar({
             onRefetchUsage={onRefetchAccountUsage}
             onLinkApiKey={onLinkApiKey}
             onRenameAccount={onRenameAccount}
+            mode={mode}
           />
         ))}
 
@@ -373,12 +376,6 @@ export function Topbar({
       </div>
 
       <div className="flex items-center gap-3">
-        {activeModel && selectedAccountId && (
-          <span className="font-mono text-[11px] text-muted-foreground/50">
-            {activeModel.name}
-          </span>
-        )}
-
         <Button
           variant="ghost"
           size="icon"

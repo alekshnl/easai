@@ -4,7 +4,7 @@ import React, { useRef, useEffect, KeyboardEvent } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { QuickActions } from "./quick-actions";
-import { ArrowUp, Loader2, Lightbulb, Hammer } from "lucide-react";
+import { ArrowUp, Loader2, Lightbulb, Hammer, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Account } from "@/hooks/use-accounts";
 import { getModelById } from "@/lib/models";
@@ -13,6 +13,7 @@ interface PromptInputProps {
   value: string;
   onChange: (value: string) => void;
   onSubmit: () => void;
+  onCancel?: () => void;
   streaming: boolean;
   selectedAccountId: string | null;
   selectedModel: string | null;
@@ -31,6 +32,7 @@ export function PromptInput({
   value,
   onChange,
   onSubmit,
+  onCancel,
   streaming,
   selectedAccountId,
   selectedModel,
@@ -71,31 +73,41 @@ export function PromptInput({
       <QuickActions onAction={(prompt) => onChange(prompt)} disabled={streaming || disabled} />
 
       {/* Input area */}
-      <div className="relative flex items-end gap-2 rounded-xl border border-border/60 bg-background px-3 py-2 shadow-sm focus-within:border-border focus-within:shadow-md transition-all">
+      <div className={cn(
+        "relative flex items-end gap-2 rounded-xl border bg-background px-3 py-2 shadow-sm focus-within:shadow-md transition-all",
+        mode === "plan"
+          ? "border-amber-500/20 focus-within:border-amber-500/30"
+          : "border-blue-500/20 focus-within:border-blue-500/30"
+      )}>
         <Textarea
           ref={textareaRef}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Stel een vraag of geef een opdracht... (Enter om te verzenden, Shift+Enter voor nieuwe regel)"
-          className="min-h-[40px] max-h-[240px] flex-1 resize-none border-0 bg-transparent p-0 font-mono text-sm shadow-none outline-none focus-visible:ring-0 placeholder:text-muted-foreground/40"
+          className="min-h-[40px] max-h-[240px] flex-1 resize-none border-0 bg-transparent p-0 font-mono text-xs shadow-none outline-none focus-visible:ring-0 placeholder:text-muted-foreground/40"
           disabled={streaming || disabled}
           rows={1}
         />
 
         <Button
           size="icon"
+          variant="ghost"
           className={cn(
             "h-8 w-8 shrink-0 rounded-lg transition-all",
-            value.trim() && !streaming && !disabled
-              ? "bg-primary text-primary-foreground hover:bg-primary/90"
-              : "bg-muted text-muted-foreground cursor-not-allowed"
+            streaming
+              ? mode === "plan"
+                ? "!bg-amber-500/20 !text-amber-500"
+                : "!bg-blue-500/20 !text-blue-500"
+              : value.trim() && !disabled
+                ? "!bg-primary !text-primary-foreground hover:!bg-primary/90"
+                : "!bg-muted !text-muted-foreground cursor-not-allowed"
           )}
-          onClick={onSubmit}
-          disabled={!value.trim() || streaming || disabled}
+          onClick={streaming ? onCancel : onSubmit}
+          disabled={!streaming && (!value.trim() || disabled)}
         >
           {streaming ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            <Square className="h-4 w-4 fill-current" />
           ) : (
             <ArrowUp className="h-3.5 w-3.5" />
           )}
@@ -112,7 +124,7 @@ export function PromptInput({
               "flex items-center gap-1 rounded px-2 py-0.5 font-mono text-[10px] transition-colors",
               mode === "plan"
                 ? "bg-amber-500/10 text-amber-500 font-medium"
-                : "bg-primary/10 text-primary font-medium"
+                : "bg-blue-500/10 text-blue-500 font-medium"
             )}
           >
             {mode === "plan" ? (

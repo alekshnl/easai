@@ -1,6 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
+import { execFileSync } from "child_process";
+
+function getGitBranch(workspaceFolder: string): string | null {
+  try {
+    const branch = execFileSync("git", ["-C", workspaceFolder, "rev-parse", "--abbrev-ref", "HEAD"], {
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+
+    return branch || null;
+  } catch {
+    return null;
+  }
+}
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -117,6 +131,10 @@ export async function GET(request: NextRequest) {
 
     searchDir(workspaceFolder);
     return NextResponse.json({ results });
+  }
+
+  if (action === "branch") {
+    return NextResponse.json({ branch: getGitBranch(workspaceFolder) });
   }
 
   return NextResponse.json({ error: "Unknown action" }, { status: 400 });

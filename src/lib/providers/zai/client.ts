@@ -63,13 +63,13 @@ interface CollectedToolCall {
   arguments: string;
 }
 
-async function streamZaiResponse(
+async function* streamZaiResponse(
   token: string,
   messages: Array<Record<string, unknown>>,
   model: string,
   tools: ToolDefinition[],
   systemMessage: string,
-): Promise<{ textDeltas: string[]; toolCalls: CollectedToolCall[]; done: boolean }> {
+): AsyncGenerator<{ type: "text_delta" | "tool_call"; content?: string; toolCall?: CollectedToolCall }> {
   const modelDef = getModelById(model);
   const apiModel = modelDef?.apiModel || model;
 
@@ -111,11 +111,8 @@ async function streamZaiResponse(
 
   const decoder = new TextDecoder();
   let buffer = "";
-  const textDeltas: string[] = [];
-  const toolCalls: CollectedToolCall[] = [];
   const toolCallArgs = new Map<string, string>();
   const toolCallNames = new Map<string, string>();
-  let responseDone = false;
 
   while (true) {
     const { done, value } = await reader.read();
@@ -129,8 +126,11 @@ async function streamZaiResponse(
       if (!line.startsWith("data: ")) continue;
       const data = line.slice(6).trim();
       if (data === "[DONE]") {
-        responseDone = true;
-        break;
+        for (const [id, name] of toolCallNames) {
+          const args = toolCallArgs.get(id) || "";
+          yield { type: "tool_call", toolCall: { id, name, arguments: args } };
+        }
+        return;
       }
 
       try {
@@ -139,27 +139,20 @@ async function streamZaiResponse(
         if (!delta) continue;
 
         if (delta.content) {
-          textDeltas.push(delta.content);
+          yield { type: "text_delta", content: delta.content };
         }
 
         if (delta.tool_calls) {
           for (const tc of delta.tool_calls) {
             const tcId = tc.id;
             if (tcId) {
-              toolCallNames.set(tcId, tc.function?.name || "unknown");
-              toolCallArgs.set(tcId, "");
-            }
-            const idx = tc.index;
-            if (tc.id !== undefined && tc.id !== null) {
-              if (!toolCallNames.has(String(tc.id))) {
-                toolCallNames.set(String(tc.id), tc.function?.name || "unknown");
-                toolCallArgs.set(String(tc.id), "");
+              if (!toolCallNames.has(tcId)) {
+                toolCallNames.set(tcId, tc.function?.name || "unknown");
+                toolCallArgs.set(tcId, "");
               }
             }
             if (tc.function?.arguments) {
-              const targetId = tc.id !== undefined && tc.id !== null
-                ? String(tc.id)
-                : (tc.index !== undefined ? toolCallArgs.keys().toArray()[tc.index] : null);
+              const targetId = tcId || (tc.index !== undefined ? [...toolCallArgs.keys()][tc.index] : null);
               if (targetId) {
                 const existing = toolCallArgs.get(targetId) || "";
                 toolCallArgs.set(targetId, existing + tc.function.arguments);
@@ -169,22 +162,22 @@ async function streamZaiResponse(
         }
 
         if (event.choices?.[0]?.finish_reason === "tool_calls" || event.choices?.[0]?.finish_reason === "stop") {
-          responseDone = true;
+          for (const [id, name] of toolCallNames) {
+            const args = toolCallArgs.get(id) || "";
+            yield { type: "tool_call", toolCall: { id, name, arguments: args } };
+          }
+          return;
         }
       } catch {
         // skip malformed events
       }
     }
-
-    if (responseDone) break;
   }
 
   for (const [id, name] of toolCallNames) {
     const args = toolCallArgs.get(id) || "";
-    toolCalls.push({ id, name, arguments: args });
+    yield { type: "tool_call", toolCall: { id, name, arguments: args } };
   }
-
-  return { textDeltas, toolCalls, done: responseDone };
 }
 
 export async function* streamChatZai(
@@ -215,21 +208,14 @@ export async function* streamChatZai(
 
   try {
     for (let iteration = 0; iteration < maxIterations; iteration++) {
-      const { textDeltas, toolCalls, done } = await streamZaiResponse(
-        token,
-        apiMessages,
-        modelId,
-        tools,
-        systemMessage,
-      );
+      const toolCalls: CollectedToolCall[] = [];
 
-      for (const delta of textDeltas) {
-        yield { type: "text_delta", content: delta };
-      }
-
-      if (done && toolCalls.length === 0) {
-        yield { type: "done" };
-        return;
+      for await (const event of streamZaiResponse(token, apiMessages, modelId, tools, systemMessage)) {
+        if (event.type === "text_delta") {
+          yield { type: "text_delta", content: event.content };
+        } else if (event.type === "tool_call" && event.toolCall) {
+          toolCalls.push(event.toolCall);
+        }
       }
 
       if (toolCalls.length === 0) {

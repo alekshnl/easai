@@ -12,6 +12,8 @@ interface ChatViewProps {
   accounts: Account[];
   selectedAccountId: string | null;
   selectedModel: string | null;
+  mode: "plan" | "build";
+  onModeChange: (mode: "plan" | "build") => void;
   onAccountModelChange: (accountId: string, model: string) => void;
   onSessionUpdate?: () => void;
 }
@@ -21,12 +23,13 @@ export function ChatView({
   accounts,
   selectedAccountId,
   selectedModel,
+  mode,
+  onModeChange,
   onAccountModelChange,
   onSessionUpdate,
 }: ChatViewProps) {
   const [prompt, setPrompt] = useState("");
   const [reasoningEffort, setReasoningEffort] = useState("medium");
-  const [mode, setMode] = useState<"plan" | "build">("build");
 
   const {
     messages,
@@ -35,6 +38,7 @@ export function ChatView({
     activeToolCalls,
     error,
     sendMessage,
+    cancelStreaming,
   } = useChat(session?.id ?? null);
 
   const handleSubmit = useCallback(async () => {
@@ -74,18 +78,20 @@ export function ChatView({
         streamingContent={streamingContent}
         activeToolCalls={activeToolCalls}
         error={error}
+        mode={mode}
       />
       <PromptInput
         value={prompt}
         onChange={setPrompt}
         onSubmit={handleSubmit}
+        onCancel={cancelStreaming}
         streaming={streaming}
         selectedAccountId={selectedAccountId}
         selectedModel={selectedModel}
         reasoningEffort={reasoningEffort}
         onReasoningEffortChange={setReasoningEffort}
         mode={mode}
-        onModeChange={setMode}
+        onModeChange={onModeChange}
         accounts={accounts}
         onAccountChange={onAccountModelChange}
         disabled={!session}

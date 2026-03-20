@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useRef, useCallback, useSyncExternalStore } from "react";
+import { useState, useRef, useCallback, useSyncExternalStore, useEffect } from "react";
 import { AppSidebar } from "@/components/sidebar/app-sidebar";
 import { ChatView } from "@/components/chat/chat-view";
-import { FolderOpen } from "lucide-react";
+import { FolderOpen, GitBranch } from "lucide-react";
 import type { Session } from "@/hooks/use-sessions";
 import type { Project } from "@/hooks/use-projects";
 
@@ -53,6 +53,8 @@ export function ResizableLayout({
   handleDeleteProject,
   handleAccountModelChange,
   fetchSessions,
+  mode,
+  onModeChange,
 }: {
   selectedSession: Session | null;
   selectedProject: Project | null;
@@ -75,12 +77,37 @@ export function ResizableLayout({
   handleDeleteProject: (id: string) => void;
   handleAccountModelChange: (accountId: string, model: string) => void;
   fetchSessions: (projectId?: string | null) => void;
+  mode: "plan" | "build";
+  onModeChange: (mode: "plan" | "build") => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR);
-  const draggingWidth = useRef<number | null>(null);
+  const [gitBranch, setGitBranch] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const storedWidth = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
-  const displayWidth = draggingWidth.current !== null ? sidebarWidth : storedWidth;
+  const displayWidth = isDragging ? sidebarWidth : storedWidth;
+
+  useEffect(() => {
+    if (!currentWorkspace) {
+      setGitBranch(null);
+      return;
+    }
+
+    const controller = new AbortController();
+
+    fetch(`/api/files?action=branch&workspace=${encodeURIComponent(currentWorkspace)}`, {
+      signal: controller.signal,
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        setGitBranch((data?.branch as string | null) ?? null);
+      })
+      .catch(() => {
+        setGitBranch(null);
+      });
+
+    return () => controller.abort();
+  }, [currentWorkspace]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -121,9 +148,17 @@ export function ResizableLayout({
             {selectedSession?.title ?? selectedProject?.name ?? "easai"}
           </span>
           {currentWorkspace && (
-            <div className="flex items-center gap-1.5 font-mono text-xs text-muted-foreground/50">
-              <FolderOpen className="h-3 w-3" />
-              <span className="truncate max-w-[300px]">{currentWorkspace}</span>
+            <div className="flex items-center gap-3 font-mono text-xs text-muted-foreground/50">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <FolderOpen className="h-3 w-3 shrink-0" />
+                <span className="truncate max-w-[300px]">{currentWorkspace}</span>
+              </div>
+              {gitBranch && (
+                <div className="flex items-center gap-1.5 text-muted-foreground/60 shrink-0">
+                  <GitBranch className="h-3 w-3" />
+                  <span>{gitBranch}</span>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -133,6 +168,8 @@ export function ResizableLayout({
           accounts={[]}
           selectedAccountId={selectedAccountId}
           selectedModel={selectedModel}
+          mode={mode}
+          onModeChange={onModeChange}
           onAccountModelChange={handleAccountModelChange}
           onSessionUpdate={() => fetchSessions(selectedProject?.id)}
         />

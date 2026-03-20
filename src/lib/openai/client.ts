@@ -74,14 +74,14 @@ interface CollectedToolCall {
   arguments: string;
 }
 
-async function streamResponse(
+async function* streamResponse(
   apiKey: string,
   input: Array<Record<string, unknown>>,
   model: string,
   tools: ToolDefinition[],
   reasoningEffort: ReasoningEffort,
   instructions: string,
-): Promise<{ textDeltas: string[]; toolCalls: CollectedToolCall[]; done: boolean }> {
+): AsyncGenerator<{ type: "text_delta" | "tool_call"; content?: string; toolCall?: CollectedToolCall }> {
   const useChatGptEndpoint = isChatGptToken(apiKey);
   const baseUrl = useChatGptEndpoint ? CHATGPT_BASE_URL : OPENAI_BASE_URL;
   const endpoint = `${baseUrl}/responses`;
@@ -129,11 +129,8 @@ async function streamResponse(
 
   const decoder = new TextDecoder();
   let buffer = "";
-  const textDeltas: string[] = [];
-  const toolCalls: CollectedToolCall[] = [];
   const toolCallArgs = new Map<string, string>();
   const toolCallNames = new Map<string, string>();
-  let responseDone = false;
 
   while (true) {
     const { done, value } = await reader.read();
@@ -146,19 +143,16 @@ async function streamResponse(
     for (const line of lines) {
       if (!line.startsWith("data: ")) continue;
       const data = line.slice(6).trim();
-      if (data === "[DONE]") {
-        responseDone = true;
-        break;
-      }
+      if (data === "[DONE]") return;
 
       try {
         const event = JSON.parse(data);
 
         if (event.type === "response.output_text.delta") {
-          textDeltas.push(event.delta || "");
+          yield { type: "text_delta", content: event.delta || "" };
         } else if (event.type === "response.content_part.delta") {
           if (event.delta?.text) {
-            textDeltas.push(event.delta.text);
+            yield { type: "text_delta", content: event.delta.text };
           }
         } else if (event.type === "response.output_item.added") {
           if (event.item?.type === "function_call") {
@@ -177,13 +171,13 @@ async function streamResponse(
             const callId = event.item.call_id || event.item.id;
             const name = event.item.name || toolCallNames.get(callId) || "";
             const args = event.item.arguments || toolCallArgs.get(callId) || "";
-            toolCalls.push({ callId: callId!, name, arguments: args });
+            yield { type: "tool_call", toolCall: { callId: callId!, name, arguments: args } };
           }
         } else if (
           event.type === "response.completed" ||
           event.type === "response.done"
         ) {
-          responseDone = true;
+          return;
         } else if (event.type === "error") {
           throw new Error(event.message || "Unknown API error");
         }
@@ -191,11 +185,7 @@ async function streamResponse(
         if (err instanceof Error && err.message.startsWith("API error")) throw err;
       }
     }
-
-    if (responseDone) break;
   }
-
-  return { textDeltas, toolCalls, done: responseDone };
 }
 
 export async function* streamChat(
@@ -225,22 +215,14 @@ export async function* streamChat(
 
   try {
     for (let iteration = 0; iteration < maxIterations; iteration++) {
-      const { textDeltas, toolCalls, done } = await streamResponse(
-        apiKey,
-        input,
-        modelId,
-        tools,
-        reasoningEffort,
-        instructions,
-      );
+      const toolCalls: CollectedToolCall[] = [];
 
-      for (const delta of textDeltas) {
-        yield { type: "text_delta", content: delta };
-      }
-
-      if (done && toolCalls.length === 0) {
-        yield { type: "done" };
-        return;
+      for await (const event of streamResponse(apiKey, input, modelId, tools, reasoningEffort, instructions)) {
+        if (event.type === "text_delta") {
+          yield { type: "text_delta", content: event.content };
+        } else if (event.type === "tool_call" && event.toolCall) {
+          toolCalls.push(event.toolCall);
+        }
       }
 
       if (toolCalls.length === 0) {

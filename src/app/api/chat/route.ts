@@ -58,6 +58,7 @@ export async function POST(request: NextRequest) {
     accountId,
     createdAt: now,
     finishedAt: null,
+    metadata: JSON.stringify({ mode }),
   });
 
   const history = await db
@@ -135,7 +136,7 @@ export async function POST(request: NextRequest) {
           } else if (event.type === "done") {
             const finishedAt = Date.now();
 
-            const metadata: Record<string, unknown> = {};
+            const metadata: Record<string, unknown> = { mode };
             if (toolCalls.length > 0) {
               metadata.toolCalls = toolCalls.map((tc) => ({
                 id: tc.id,

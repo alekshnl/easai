@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type { ToolCallDisplayData } from "@/components/chat/tool-call-display";
 
 export interface Message {
@@ -28,6 +28,7 @@ export function useChat(sessionId: string | null) {
   const [streamingContent, setStreamingContent] = useState("");
   const [activeToolCalls, setActiveToolCalls] = useState<ToolCallDisplayData[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const fetchMessages = useCallback(async () => {
     if (!sessionId) {
@@ -82,6 +83,8 @@ export function useChat(sessionId: string | null) {
       };
       setMessages((prev) => [...prev, tempUserMsg]);
 
+      abortControllerRef.current = new AbortController();
+
       try {
         const res = await fetch("/api/chat", {
           method: "POST",
@@ -94,6 +97,7 @@ export function useChat(sessionId: string | null) {
             reasoningEffort,
             mode,
           }),
+          signal: abortControllerRef.current.signal,
         });
 
         if (!res.ok) {
@@ -161,6 +165,14 @@ export function useChat(sessionId: string | null) {
           }
         }
       } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") {
+          // User cancelled - just reset state silently
+          setStreaming(false);
+          setStreamingContent("");
+          setActiveToolCalls([]);
+          await fetchMessages();
+          return;
+        }
         setError(err instanceof Error ? err.message : String(err));
         setStreaming(false);
         setStreamingContent("");
@@ -171,6 +183,13 @@ export function useChat(sessionId: string | null) {
     [sessionId, streaming, fetchMessages]
   );
 
+  const cancelStreaming = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+  }, []);
+
   return {
     messages,
     loading,
@@ -179,6 +198,7 @@ export function useChat(sessionId: string | null) {
     activeToolCalls,
     error,
     sendMessage,
+    cancelStreaming,
     fetchMessages,
   };
 }

@@ -2,7 +2,7 @@
 
 import React from "react";
 import { Button } from "@/components/ui/button";
-import { GitCommitHorizontal, GitMerge } from "lucide-react";
+import { GitCommitHorizontal, GitMerge, GitBranch } from "lucide-react";
 
 interface QuickActionsProps {
   onAction: (prompt: string) => void;
@@ -11,10 +11,15 @@ interface QuickActionsProps {
 
 const QUICK_ACTIONS = [
   {
+    label: "Git create feature",
+    icon: GitBranch,
+    prompt: 'Git create feature ""',
+  },
+  {
     label: "Git+Commit",
     icon: GitCommitHorizontal,
     prompt:
-      "Review the staged changes and create an appropriate git commit with a clear, descriptive commit message following conventional commits format.",
+      "Review the staged changes and create an appropriate git commit with a clear, descriptive commit message following conventional commits format, then push to remote.",
   },
   {
     label: "Git+Commit, feature>main, switch",
