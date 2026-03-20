@@ -44,6 +44,17 @@ function buildSystemMessage(workspaceFolder?: string, mode?: string): string {
   if (workspaceFolder) {
     system += `\nThe current workspace folder is: ${workspaceFolder}\n`;
   }
+  system += "\n## Parallel Workers (task tool)\n";
+  system += "You MUST use workers proactively for efficiency. When a task involves:\n";
+  system += "- Multiple independent files or modules → Assign each to a different worker\n";
+  system += "- Searching AND implementing → One worker searches, others implement\n";
+  system += "- Complex multi-file changes → Parallelize across workers\n";
+  system += "\nRules:\n";
+  system += "- ALWAYS start multiple workers in a SINGLE message (multiple task tool calls)\n";
+  system += "- Assign DIFFERENT files to each worker to avoid conflicts\n";
+  system += "- Be specific in each worker's prompt: exact files, exact changes\n";
+  system += "- Collect all results and summarize for the user\n";
+  system += "- Example: 3 workers = 3 task calls in one message, each with different files\n";
   if (mode === "plan") {
     system += "\n## Mode: Plan\n";
     system += "You are in PLAN mode. Do NOT write code, edit files, or execute commands.\n";
@@ -238,7 +249,13 @@ export async function* streamChatZai(
           parsedArgs = {};
         }
 
-        const result = await executeTool(tc.name, parsedArgs, workspaceFolder || process.cwd(), readFiles);
+        const result = await executeTool(
+          tc.name,
+          parsedArgs,
+          workspaceFolder || process.cwd(),
+          readFiles,
+          { apiKey: token, model: modelId, provider: "zai" },
+        );
         const resultText = result.error ? `Error: ${result.error}` : result.output;
 
         toolCallRecords.push({

@@ -9,6 +9,7 @@ import { executeGrep } from "./tools/grep";
 import { executeWebFetch } from "./tools/webfetch";
 import { executeWebSearch } from "./tools/websearch";
 import { executeTodowrite } from "./tools/todowrite";
+import { executeTask } from "./tools/task";
 
 const MAX_RESULT_LENGTH = 100_000;
 
@@ -17,11 +18,18 @@ export interface ToolExecuteResult {
   error?: string;
 }
 
+export interface WorkerToolContext {
+  apiKey?: string;
+  model?: string;
+  provider?: "openai" | "zai";
+}
+
 export async function executeTool(
   name: string,
   args: Record<string, unknown>,
   workspaceFolder: string,
   readFiles: Set<string>,
+  workerContext?: WorkerToolContext,
 ): Promise<ToolExecuteResult> {
   try {
     let output: string;
@@ -100,6 +108,22 @@ export async function executeTool(
       case "todowrite":
         output = await executeTodowrite(
           { todos: args.todos as Array<{ content: string; status: string; priority?: string }> },
+        );
+        break;
+
+      case "task":
+        if (!workerContext?.apiKey || !workerContext?.model || !workerContext?.provider) {
+          output = "Error: Task tool requires API key, model, and provider context";
+          break;
+        }
+        output = await executeTask(
+          { prompt: args.prompt as string },
+          {
+            apiKey: workerContext.apiKey,
+            model: workerContext.model,
+            provider: workerContext.provider,
+            workspaceFolder,
+          },
         );
         break;
 

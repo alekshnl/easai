@@ -308,4 +308,42 @@ Use this tool proactively in these scenarios:
       required: ["todos"],
     },
   },
+  {
+    type: "function",
+    name: "task",
+    description: `Launch a worker agent to perform a task autonomously.
+
+The worker has access to ALL tools including read, write, edit, bash, glob, grep, webfetch, websearch, todowrite.
+
+IMPORTANT: Use workers PROACTIVELY and in PARALLEL. Do NOT do work sequentially when it can be parallelized.
+
+When to use (MANDATORY):
+- Multiple independent files → One worker per file
+- Searching AND implementing → Workers work in parallel
+- Any task involving 2+ files → Use 2+ workers in parallel
+
+Usage:
+1. ALWAYS launch multiple workers in a SINGLE message (multiple task tool calls)
+2. Assign DIFFERENT files to each worker
+3. Be specific: exact files, exact changes expected
+4. Workers are independent - they cannot see each other's work
+5. Collect all results and summarize
+
+Example: Implementing a feature in 3 files = 3 task calls in ONE message:
+- task 1: "Edit src/auth.ts to add validation"
+- task 2: "Edit src/api.ts to add endpoint"  
+- task 3: "Edit src/types.ts to add types"
+
+Workers CANNOT spawn nested workers. If you want to read a specific file, use the read tool directly.`,
+    parameters: {
+      type: "object",
+      properties: {
+        prompt: {
+          type: "string",
+          description: "The task for the worker to perform. Be specific about what to do, which files to modify, and what to return.",
+        },
+      },
+      required: ["prompt"],
+    },
+  },
 ];

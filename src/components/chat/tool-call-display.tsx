@@ -14,6 +14,7 @@ import {
   ChevronDown,
   ChevronRight,
   Loader2,
+  Bot,
 } from "lucide-react";
 
 const TOOL_ICONS: Record<string, React.ReactNode> = {
@@ -27,6 +28,7 @@ const TOOL_ICONS: Record<string, React.ReactNode> = {
   webfetch: <Globe className="h-3 w-3" />,
   websearch: <Globe className="h-3 w-3" />,
   todowrite: <ListTodo className="h-3 w-3" />,
+  task: <Bot className="h-3 w-3" />,
 };
 
 function getDefaultIcon() {
@@ -63,6 +65,10 @@ function formatArguments(name: string, argsStr: string): string {
     if (name === "todowrite") {
       const count = Array.isArray(args.todos) ? args.todos.length : 0;
       return `${count} todo(s)`;
+    }
+    if (name === "task") {
+      const prompt = args.prompt || argsStr;
+      return prompt.length > 60 ? prompt.slice(0, 60) + "..." : prompt;
     }
     return argsStr.slice(0, 120);
   } catch {
@@ -109,7 +115,9 @@ export function ToolCallDisplay({ tool }: ToolCallDisplayProps) {
         <span className="text-muted-foreground/70 shrink-0">{icon}</span>
         <span className="text-muted-foreground font-medium shrink-0">{tool.name}</span>
         <span className="text-muted-foreground/40 truncate min-w-0">{summary}</span>
-        {isRunning && <Loader2 className="h-3 w-3 animate-spin ml-auto text-muted-foreground/50" />}
+        {tool.name === "task" && (
+          <span className="text-xs text-blue-500/60 ml-1">(worker)</span>
+        )}
         {!isRunning && tool.status === "completed" && (
           <span className="ml-auto text-emerald-500/60 shrink-0">done</span>
         )}

@@ -51,6 +51,17 @@ function buildInstructions(workspaceFolder?: string, mode?: string): string {
   if (workspaceFolder) {
     instructions += `\nThe current workspace folder is: ${workspaceFolder}\n`;
   }
+  instructions += "\n## Parallel Workers (task tool)\n";
+  instructions += "You MUST use workers proactively for efficiency. When a task involves:\n";
+  instructions += "- Multiple independent files or modules → Assign each to a different worker\n";
+  instructions += "- Searching AND implementing → One worker searches, others implement\n";
+  instructions += "- Complex multi-file changes → Parallelize across workers\n";
+  instructions += "\nRules:\n";
+  instructions += "- ALWAYS start multiple workers in a SINGLE message (multiple task tool calls)\n";
+  instructions += "- Assign DIFFERENT files to each worker to avoid conflicts\n";
+  instructions += "- Be specific in each worker's prompt: exact files, exact changes\n";
+  instructions += "- Collect all results and summarize for the user\n";
+  instructions += "- Example: 3 workers = 3 task calls in one message, each with different files\n";
   if (mode === "plan") {
     instructions += "\n## Mode: Plan\n";
     instructions += "You are in PLAN mode. Do NOT write code, edit files, or execute commands.\n";
@@ -245,7 +256,13 @@ export async function* streamChat(
           parsedArgs = {};
         }
 
-        const result = await executeTool(tc.name, parsedArgs, workspaceFolder || process.cwd(), readFiles);
+        const result = await executeTool(
+          tc.name,
+          parsedArgs,
+          workspaceFolder || process.cwd(),
+          readFiles,
+          { apiKey, model: modelId, provider: "openai" },
+        );
 
         const resultText = result.error
           ? `Error: ${result.error}`
