@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -17,6 +17,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Settings, Plus, ChevronDown, RefreshCw } from "lucide-react";
 import { getModelsForProvider, MODELS } from "@/lib/models";
@@ -86,6 +87,8 @@ function AccountDropdown({
   isActive,
   selectedModel,
   usage,
+  open,
+  onOpenChange,
   onAccountModelChange,
   onDeleteAccount,
   onRefetchUsage,
@@ -96,14 +99,16 @@ function AccountDropdown({
   isActive: boolean;
   selectedModel: string | null;
   usage: AccountUsage | undefined;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onAccountModelChange: (accountId: string, model: string) => void;
   onDeleteAccount: (id: string) => void;
   onRefetchUsage: (accountId: string) => void;
   onLinkApiKey: (accountId: string) => void;
   onRenameAccount: (accountId: string, name: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [renameValue, setRenameValue] = useState(account.name);
   const models = getModelsForProvider(account.provider);
 
@@ -115,10 +120,16 @@ function AccountDropdown({
     setRenameOpen(false);
   };
 
+  const handleDelete = () => {
+    onDeleteAccount(account.id);
+    setDeleteOpen(false);
+    onOpenChange(false);
+  };
+
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
+    <DropdownMenu open={open} onOpenChange={onOpenChange}>
       <DropdownMenuTrigger
-        onMouseEnter={() => setOpen(true)}
+        onMouseEnter={() => onOpenChange(true)}
         className={cn(
           "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 font-mono text-xs transition-colors",
           isActive
@@ -136,8 +147,8 @@ function AccountDropdown({
       <DropdownMenuContent
         align="start"
         className="w-72 font-mono"
-        onMouseEnter={() => setOpen(true)}
-        onMouseLeave={() => setOpen(false)}
+        onMouseEnter={() => onOpenChange(true)}
+        onMouseLeave={() => onOpenChange(false)}
       >
         <DropdownMenuGroup>
           <div className="flex items-center justify-between px-2 py-1.5">
@@ -200,7 +211,7 @@ function AccountDropdown({
                 )}
                 onClick={() => {
                   onAccountModelChange(account.id, model.id);
-                  setOpen(false);
+                  onOpenChange(false);
                 }}
               >
                 <div className={cn(
@@ -217,7 +228,7 @@ function AccountDropdown({
 
         <DropdownMenuItem
           className="gap-2 text-xs text-destructive/70 cursor-pointer"
-          onClick={() => onDeleteAccount(account.id)}
+          onClick={() => setDeleteOpen(true)}
         >
           Verwijder account
         </DropdownMenuItem>
@@ -227,13 +238,14 @@ function AccountDropdown({
             <DropdownMenuSeparator />
             <DropdownMenuItem
               className="gap-2 text-xs text-primary cursor-pointer"
-              onClick={() => { onLinkApiKey(account.id); setOpen(false); }}
+              onClick={() => { onLinkApiKey(account.id); onOpenChange(false); }}
             >
               API key koppelen
             </DropdownMenuItem>
           </>
         )}
       </DropdownMenuContent>
+
       <Dialog open={renameOpen} onOpenChange={(v) => { if (!v) setRenameOpen(false); }}>
         <DialogContent className="max-w-xs font-mono">
           <DialogHeader>
@@ -249,6 +261,21 @@ function AccountDropdown({
           <div className="flex justify-end gap-2">
             <Button variant="ghost" size="sm" className="font-mono text-xs" onClick={() => setRenameOpen(false)}>Annuleren</Button>
             <Button size="sm" className="font-mono text-xs" onClick={handleRename}>Opslaan</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteOpen} onOpenChange={(v) => { if (!v) setDeleteOpen(false); }}>
+        <DialogContent className="max-w-xs font-mono">
+          <DialogHeader>
+            <DialogTitle className="font-mono text-sm">Account verwijderen</DialogTitle>
+            <DialogDescription className="font-mono text-xs text-muted-foreground">
+              Weet je zeker dat je <strong>{account.name}</strong> wilt verwijderen? Dit kan niet ongedaan worden.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" size="sm" className="font-mono text-xs" onClick={() => setDeleteOpen(false)}>Annuleren</Button>
+            <Button size="sm" className="font-mono text-xs bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={handleDelete}>Verwijderen</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -313,6 +340,12 @@ export function Topbar({
     ? MODELS.find((m) => m.id === selectedModel)
     : null;
 
+  const [openAccountId, setOpenAccountId] = useState<string | null>(null);
+
+  const handleOpenChange = useCallback((accountId: string, open: boolean) => {
+    setOpenAccountId(open ? accountId : null);
+  }, []);
+
   return (
     <div className="flex items-center justify-between border-b border-border/30 px-3 py-1.5">
       <div className="flex items-center gap-1">
@@ -323,6 +356,8 @@ export function Topbar({
             isActive={account.id === selectedAccountId}
             selectedModel={selectedModel}
             usage={usageMap[account.id]}
+            open={openAccountId === account.id}
+            onOpenChange={(open) => handleOpenChange(account.id, open)}
             onAccountModelChange={onAccountModelChange}
             onDeleteAccount={onDeleteAccount}
             onRefetchUsage={onRefetchAccountUsage}
@@ -331,7 +366,7 @@ export function Topbar({
           />
         ))}
 
-        <AddAccountDropdown onAddAccount={onAddAccount} />
+        <AddAccountDropdown onAddAccount={(provider) => { setOpenAccountId(null); onAddAccount(provider); }} />
       </div>
 
       <div className="flex items-center gap-3">

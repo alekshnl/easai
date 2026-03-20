@@ -38,6 +38,8 @@ function parseResponse(data: Record<string, unknown>): Omit<AccountUsage, "refre
     primaryResetAt = new Date(Date.now() + primarySeconds * 1000);
   } else if (typeof primary.resetAt === "string") {
     primaryResetAt = new Date(primary.resetAt);
+  } else if (typeof primary.resetAt === "number") {
+    primaryResetAt = new Date(primary.resetAt);
   } else if (primary.resetAt instanceof Date) {
     primaryResetAt = primary.resetAt;
   }
@@ -46,6 +48,8 @@ function parseResponse(data: Record<string, unknown>): Omit<AccountUsage, "refre
   if (secondarySeconds) {
     secondaryResetAt = new Date(Date.now() + secondarySeconds * 1000);
   } else if (typeof secondary.resetAt === "string") {
+    secondaryResetAt = new Date(secondary.resetAt);
+  } else if (typeof secondary.resetAt === "number") {
     secondaryResetAt = new Date(secondary.resetAt);
   } else if (secondary.resetAt instanceof Date) {
     secondaryResetAt = secondary.resetAt;

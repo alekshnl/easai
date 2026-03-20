@@ -4,6 +4,7 @@ import { messages, sessions, accounts } from "@/lib/db/schema";
 import { eq, asc } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 import { streamChat, type ChatMessage, type ReasoningEffort, type ToolCallRecord } from "@/lib/openai/client";
+import { streamChatZai } from "@/lib/providers/zai/client";
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
@@ -28,9 +29,12 @@ export async function POST(request: NextRequest) {
     .from(accounts)
     .where(eq(accounts.id, accountId));
 
-  if (!account || !account.accessToken) {
+  const apiKey = account.provider === "zai"
+    ? account.apiKey || account.accessToken
+    : account.accessToken || account.apiKey;
+  if (!apiKey) {
     return new Response(
-      JSON.stringify({ error: "Account not found or no access token" }),
+      JSON.stringify({ error: "Account has no API key or access token" }),
       { status: 401, headers: { "Content-Type": "application/json" } }
     );
   }
@@ -81,14 +85,11 @@ export async function POST(request: NextRequest) {
       const toolCalls: ToolCallRecord[] = [];
 
       try {
-        for await (const event of streamChat(
-          account.accessToken!,
-          chatMessages,
-          model,
-          reasoningEffort as ReasoningEffort,
-          workspaceFolder,
-          mode,
-        )) {
+        const streamFn = account.provider === "zai"
+          ? streamChatZai(apiKey, chatMessages, model, reasoningEffort as ReasoningEffort, workspaceFolder, mode)
+          : streamChat(apiKey, chatMessages, model, reasoningEffort as ReasoningEffort, workspaceFolder, mode);
+
+        for await (const event of streamFn) {
           if (event.type === "text_delta" && event.content) {
             fullContent += event.content;
             controller.enqueue(
