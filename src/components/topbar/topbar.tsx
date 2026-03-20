@@ -349,6 +349,9 @@ export function Topbar({
   return (
     <div className="flex items-center justify-between border-b border-border/30 px-3 py-1.5">
       <div className="flex items-center gap-1">
+        <div className="font-mono text-sm font-semibold tracking-wider text-foreground/80 mr-2">
+          easai
+        </div>
         {accounts.map((account) => (
           <AccountDropdown
             key={account.id}

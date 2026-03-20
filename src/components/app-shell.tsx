@@ -301,6 +301,7 @@ function AppShellInner() {
         />
         <OAuthWaitDialog open={oauthWaiting} onCancel={() => { setOauthWaiting(false); oauthCleanupRef.current?.(); }} />
         <ZaiApiKeyDialog open={zaiApiKeyOpen} accountId={zaiApiKeyId} onClose={() => setZaiApiKeyOpen(false)} onDone={handleZaiApiKeyDone} />
+        <CreateProjectDialog open={createProjectOpen} onOpenChange={setCreateProjectOpen} onSubmit={handleCreateProject} />
       </div>
   );
 }

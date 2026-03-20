@@ -50,18 +50,12 @@ export function AppSidebar({
   onDeleteProject,
 }: AppSidebarProps) {
   return (
-    <div className="flex flex-col h-full border-l border-border/40 bg-sidebar text-sidebar-foreground">
-      <div className="px-4 py-3">
-        <div className="font-mono text-sm font-semibold tracking-wider text-foreground/80">
-          easai
-        </div>
-      </div>
-
+    <div className="flex flex-col h-full border-l border-border/40 bg-sidebar text-sidebar-foreground font-sans">
       <div className="border-b border-border/30" />
 
-      <div className="flex-1 overflow-y-auto px-2 py-2">
+      <div className="flex-1 overflow-y-auto px-1.5 py-1.5">
         <div className="flex items-center justify-between mb-1">
-          <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/50">
+          <span className="text-[10px] uppercase tracking-wide text-muted-foreground/50">
             Projecten
           </span>
           <Button
@@ -80,7 +74,7 @@ export function AppSidebar({
             <Skeleton className="h-7 w-5/6" />
           </div>
         ) : projects.length === 0 ? (
-          <p className="font-mono text-xs text-muted-foreground/40 px-2 py-2">
+          <p className="text-xs text-muted-foreground/40 px-2 py-2">
             Geen projecten — maak er een aan
           </p>
         ) : (
@@ -169,8 +163,8 @@ function ProjectItem({
                 open && isActive && "rotate-90"
               )}
             />
-            <FolderOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50" />
-            <span className="truncate font-mono text-xs">{project.name}</span>
+            <FolderOpen className="h-3 w-3 shrink-0 text-muted-foreground/40" />
+            <span className="truncate text-xs">{project.name}</span>
           </CollapsibleTrigger>
 
           <div className="flex items-center gap-0">
@@ -194,7 +188,7 @@ function ProjectItem({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem
-                  className="gap-2 font-mono text-xs text-destructive"
+                  className="gap-2 text-xs text-destructive"
                   onClick={() => onDeleteProject(project.id)}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -214,7 +208,7 @@ function ProjectItem({
                   <Skeleton className="h-6 w-5/6" />
                 </div>
               ) : activeSessions.length === 0 ? (
-                <p className="font-mono text-[10px] text-muted-foreground/40 px-2 py-1">
+                <p className="text-[10px] text-muted-foreground/40 px-2 py-1">
                   Geen chats
                 </p>
               ) : (
@@ -234,7 +228,7 @@ function ProjectItem({
               {archivedSessions.length > 0 && (
                 <div className="mt-1">
                   <Collapsible open={archivedOpen} onOpenChange={setArchivedOpen}>
-                    <CollapsibleTrigger className="flex w-full items-center gap-1 px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground/40 hover:text-muted-foreground/60 transition-colors">
+                    <CollapsibleTrigger className="flex w-full items-center gap-1 px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground/40 hover:text-muted-foreground/60 transition-colors">
                       <ChevronRight
                         className={cn(
                           "h-3 w-3 transition-transform",
@@ -310,14 +304,14 @@ function ChatItem({
           onClick={onSelect}
           onDoubleClick={handleDoubleClick}
           className={cn(
-            "flex w-full items-center gap-2 rounded-md px-2 py-1 font-mono text-xs transition-colors",
+            "flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors",
             isActive
               ? "bg-sidebar-accent text-sidebar-accent-foreground"
               : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
           )}
         >
-          <span className="h-1.5 w-1.5 rounded-full shrink-0 transition-colors" />
-          <span className="truncate">{session.title}</span>
+          <span className="h-1 w-1 rounded-full shrink-0 bg-muted-foreground/30" />
+          <span className="truncate text-[11px]">{session.title}</span>
         </button>
         <DropdownMenu>
           <DropdownMenuTrigger
@@ -327,7 +321,7 @@ function ChatItem({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem
-              className="gap-2 font-mono text-xs"
+              className="gap-2 text-xs"
               onClick={() => {
                 setNewTitle(session.title);
                 setRenaming(true);
@@ -337,14 +331,14 @@ function ChatItem({
               Hernoem
             </DropdownMenuItem>
             <DropdownMenuItem
-              className="gap-2 font-mono text-xs"
+              className="gap-2 text-xs"
               onClick={onArchive}
             >
               <Archive className="h-3.5 w-3.5" />
               {archived ? "Uit archief" : "Archiveer"}
             </DropdownMenuItem>
             <DropdownMenuItem
-              className="gap-2 font-mono text-xs text-destructive"
+              className="gap-2 text-xs text-destructive"
               onClick={onDelete}
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -357,7 +351,7 @@ function ChatItem({
       <Dialog open={renaming} onOpenChange={setRenaming}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="font-mono text-sm">Hernoem chat</DialogTitle>
+            <DialogTitle className="text-sm">Hernoem chat</DialogTitle>
           </DialogHeader>
           <Input
             value={newTitle}
@@ -367,14 +361,14 @@ function ChatItem({
               if (e.key === "Escape") setRenaming(false);
             }}
             autoFocus
-            className="font-mono text-sm"
+            className="text-sm"
             placeholder="Chat naam..."
           />
           <DialogFooter className="gap-2">
-            <DialogClose className="font-mono text-xs rounded-md border border-input bg-background px-3 py-1.5 hover:bg-accent hover:text-accent-foreground">
+            <DialogClose className="text-xs rounded-md border border-input bg-background px-3 py-1.5 hover:bg-accent hover:text-accent-foreground">
               Annuleer
             </DialogClose>
-            <Button size="sm" className="font-mono text-xs" onClick={handleRename}>
+            <Button size="sm" className="text-xs" onClick={handleRename}>
               Opslaan
             </Button>
           </DialogFooter>
