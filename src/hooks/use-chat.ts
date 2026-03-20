@@ -21,7 +21,7 @@ export interface PersistedToolCall {
   result?: string;
 }
 
-export function useChat(sessionId: string | null) {
+export function useChat(sessionId: string | null, onComplete?: () => void) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const [streaming, setStreaming] = useState(false);
@@ -151,12 +151,14 @@ export function useChat(sessionId: string | null) {
                 setError(event.error);
                 setStreaming(false);
                 setActiveToolCalls([]);
+                onComplete?.();
                 return;
               } else if (event.type === "done") {
                 setStreamingContent("");
                 setStreaming(false);
                 setActiveToolCalls([]);
                 await fetchMessages();
+                onComplete?.();
                 return;
               }
             } catch {
@@ -166,11 +168,11 @@ export function useChat(sessionId: string | null) {
         }
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") {
-          // User cancelled - just reset state silently
           setStreaming(false);
           setStreamingContent("");
           setActiveToolCalls([]);
           await fetchMessages();
+          onComplete?.();
           return;
         }
         setError(err instanceof Error ? err.message : String(err));
@@ -178,9 +180,10 @@ export function useChat(sessionId: string | null) {
         setStreamingContent("");
         setActiveToolCalls([]);
         await fetchMessages();
+        onComplete?.();
       }
     },
-    [sessionId, streaming, fetchMessages]
+    [sessionId, streaming, fetchMessages, onComplete]
   );
 
   const cancelStreaming = useCallback(() => {

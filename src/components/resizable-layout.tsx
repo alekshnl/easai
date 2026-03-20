@@ -109,6 +109,17 @@ export function ResizableLayout({
     return () => controller.abort();
   }, [currentWorkspace]);
 
+  const refreshGitBranch = useCallback(() => {
+    if (!currentWorkspace) return;
+
+    fetch(`/api/files?action=branch&workspace=${encodeURIComponent(currentWorkspace)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        setGitBranch((data?.branch as string | null) ?? null);
+      })
+      .catch(() => {});
+  }, [currentWorkspace]);
+
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     const container = containerRef.current;
@@ -172,6 +183,7 @@ export function ResizableLayout({
           onModeChange={onModeChange}
           onAccountModelChange={handleAccountModelChange}
           onSessionUpdate={() => fetchSessions(selectedProject?.id)}
+          onMessageComplete={refreshGitBranch}
         />
       </div>
 

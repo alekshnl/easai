@@ -16,6 +16,7 @@ interface ChatViewProps {
   onModeChange: (mode: "plan" | "build") => void;
   onAccountModelChange: (accountId: string, model: string) => void;
   onSessionUpdate?: () => void;
+  onMessageComplete?: () => void;
 }
 
 export function ChatView({
@@ -27,6 +28,7 @@ export function ChatView({
   onModeChange,
   onAccountModelChange,
   onSessionUpdate,
+  onMessageComplete,
 }: ChatViewProps) {
   const [prompt, setPrompt] = useState("");
   const [reasoningEffort, setReasoningEffort] = useState("medium");
@@ -39,7 +41,7 @@ export function ChatView({
     error,
     sendMessage,
     cancelStreaming,
-  } = useChat(session?.id ?? null);
+  } = useChat(session?.id ?? null, onMessageComplete);
 
   const handleSubmit = useCallback(async () => {
     if (!prompt.trim() || !session || !selectedAccountId || !selectedModel) return;
