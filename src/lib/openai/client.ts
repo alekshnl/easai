@@ -249,7 +249,9 @@ export async function* streamChat(
           toolName: tc.name,
           toolArguments: tc.arguments,
         };
+      }
 
+      const toolPromises = toolCalls.map(async (tc) => {
         let parsedArgs: Record<string, unknown> = {};
         try {
           parsedArgs = JSON.parse(tc.arguments);
@@ -269,6 +271,15 @@ export async function* streamChat(
           ? `Error: ${result.error}`
           : result.output;
 
+        return {
+          tc,
+          resultText,
+        };
+      });
+
+      const results = await Promise.all(toolPromises);
+
+      for (const { tc, resultText } of results) {
         toolCallRecords.push({
           id: tc.callId,
           name: tc.name,

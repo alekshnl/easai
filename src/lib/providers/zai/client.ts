@@ -242,7 +242,9 @@ export async function* streamChatZai(
           toolName: tc.name,
           toolArguments: tc.arguments,
         };
+      }
 
+      const toolPromises = toolCalls.map(async (tc) => {
         let parsedArgs: Record<string, unknown> = {};
         try {
           parsedArgs = JSON.parse(tc.arguments);
@@ -259,6 +261,12 @@ export async function* streamChatZai(
         );
         const resultText = result.error ? `Error: ${result.error}` : result.output;
 
+        return { tc, resultText };
+      });
+
+      const results = await Promise.all(toolPromises);
+
+      for (const { tc, resultText } of results) {
         toolCallRecords.push({
           id: tc.id,
           name: tc.name,
