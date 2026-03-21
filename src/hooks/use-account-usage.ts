@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
+
+const CLIENT_USAGE_CACHE = new Map<string, AccountUsage>();
 
 export interface AccountUsage {
   primary: {
@@ -25,6 +27,13 @@ const EMPTY_USAGE: AccountUsage = {
   error: null,
   refreshing: false,
 };
+
+const CACHE_TTL_MS = 5 * 60 * 1000;
+const inFlightRequests = new Map<string, Promise<AccountUsage>>();
+
+function getRequestKey(accountId: string, force = false) {
+  return `${accountId}:${force ? "force" : "default"}`;
+}
 
 function parseResponse(data: Record<string, unknown>): Omit<AccountUsage, "refreshing"> {
   const primary = (data.primary || {}) as Record<string, unknown>;
@@ -71,49 +80,131 @@ function parseResponse(data: Record<string, unknown>): Omit<AccountUsage, "refre
   };
 }
 
-async function fetchUsage(accountId: string): Promise<AccountUsage> {
+async function fetchUsage(accountId: string, options?: { force?: boolean }): Promise<AccountUsage> {
+  const searchParams = new URLSearchParams({ accountId });
+  if (options?.force) {
+    searchParams.set("force", "1");
+  }
+
   try {
-    const res = await fetch(`/api/usage?accountId=${accountId}`);
+    const res = await fetch(`/api/usage?${searchParams.toString()}`);
     if (res.ok) {
       const data = await res.json();
-      return { ...parseResponse(data), refreshing: false };
+      const result = { ...parseResponse(data), refreshing: false };
+      CLIENT_USAGE_CACHE.set(accountId, result);
+      return result;
     }
     const err = await res.json().catch(() => ({ error: "Unknown error" }));
+    const fallback = CLIENT_USAGE_CACHE.get(accountId);
+    if (fallback) {
+      return { ...fallback, error: err.error || `HTTP ${res.status}`, refreshing: false };
+    }
     return { ...EMPTY_USAGE, error: err.error || `HTTP ${res.status}`, refreshing: false };
   } catch (err) {
+    const fallback = CLIENT_USAGE_CACHE.get(accountId);
+    if (fallback) {
+      return { ...fallback, error: String(err), refreshing: false };
+    }
     return { ...EMPTY_USAGE, error: String(err), refreshing: false };
   }
 }
 
 export function useAccountUsage(accountIds: string[]) {
-  const [usageMap, setUsageMap] = useState<Record<string, AccountUsage>>({});
-
-  const fetchAll = useCallback(async () => {
-    const results: Record<string, AccountUsage> = {};
-    await Promise.allSettled(
-      accountIds.map(async (id) => {
-        results[id] = { ...EMPTY_USAGE, refreshing: true };
-        setUsageMap((prev) => ({ ...prev, [id]: { ...EMPTY_USAGE, refreshing: true } }));
-        results[id] = await fetchUsage(id);
-      })
-    );
-    setUsageMap((prev) => {
-      const next = { ...prev };
-      for (const [id, usage] of Object.entries(results)) {
-        next[id] = usage;
+  const [usageMap, setUsageMap] = useState<Record<string, AccountUsage>>(() => {
+    const initial: Record<string, AccountUsage> = {};
+    for (const accountId of accountIds) {
+      const cached = CLIENT_USAGE_CACHE.get(accountId);
+      if (cached) {
+        initial[accountId] = cached;
       }
-      return next;
-    });
-  }, [accountIds.join(",")]);
+    }
+    return initial;
+  });
+  const usageMapRef = useRef<Record<string, AccountUsage>>({});
 
-  const refetchAccount = useCallback(async (accountId: string) => {
+  useEffect(() => {
+    usageMapRef.current = usageMap;
+  }, [usageMap]);
+
+  const refetchAccount = useCallback(async (accountId: string, options?: { force?: boolean }) => {
+    const current = usageMapRef.current[accountId] || CLIENT_USAGE_CACHE.get(accountId);
+    const force = options?.force === true;
+    const isFresh = !!current && Date.now() - current.fetchedAt < CACHE_TTL_MS;
+    if (!force && isFresh) {
+      if (usageMapRef.current[accountId] !== current) {
+        setUsageMap((prev) => ({ ...prev, [accountId]: current }));
+      }
+      return current;
+    }
+
+    const inFlightKey = getRequestKey(accountId, force);
+    const existingRequest = inFlightRequests.get(inFlightKey);
+    if (existingRequest) {
+      if (usageMapRef.current[accountId] !== current && current) {
+        setUsageMap((prev) => ({ ...prev, [accountId]: current }));
+      }
+      return existingRequest;
+    }
+
     setUsageMap((prev) => ({
       ...prev,
-      [accountId]: { ...(prev[accountId] || EMPTY_USAGE), refreshing: true },
+      [accountId]: { ...(prev[accountId] || current || EMPTY_USAGE), refreshing: true },
     }));
-    const result = await fetchUsage(accountId);
-    setUsageMap((prev) => ({ ...prev, [accountId]: result }));
+
+    const request = fetchUsage(accountId, options)
+      .then((result) => {
+        setUsageMap((prev) => ({ ...prev, [accountId]: result }));
+        return result;
+      })
+      .finally(() => {
+        inFlightRequests.delete(inFlightKey);
+      });
+
+    inFlightRequests.set(inFlightKey, request);
+    return request;
   }, []);
+
+  const accountIdsKey = accountIds.join(",");
+  const fetchAll = useCallback(async (options?: { force?: boolean }) => {
+    await Promise.allSettled(accountIds.map((id) => refetchAccount(id, options)));
+  }, [accountIdsKey, refetchAccount]);
+
+  useEffect(() => {
+    setUsageMap((prev) => {
+      const next: Record<string, AccountUsage> = {};
+      for (const accountId of accountIds) {
+        const usage = prev[accountId] || CLIENT_USAGE_CACHE.get(accountId);
+        if (usage) {
+          next[accountId] = usage;
+        }
+      }
+      if (Object.keys(next).length !== Object.keys(prev).length || 
+          Object.keys(next).some(k => !prev[k])) {
+        return next;
+      }
+      return prev;
+    });
+
+    for (const cachedId of CLIENT_USAGE_CACHE.keys()) {
+      if (!accountIds.includes(cachedId)) {
+        CLIENT_USAGE_CACHE.delete(cachedId);
+      }
+    }
+  }, [accountIds.join(",")]);
+
+  useEffect(() => {
+    if (accountIds.length === 0) {
+      return;
+    }
+
+    void fetchAll();
+
+    const interval = setInterval(() => {
+      void fetchAll();
+    }, CACHE_TTL_MS);
+
+    return () => clearInterval(interval);
+  }, [accountIdsKey, fetchAll]);
 
   return { usageMap, fetchAll, refetchAccount };
 }

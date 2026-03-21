@@ -36,8 +36,8 @@ interface TopbarProps {
   onLinkApiKey: (accountId: string) => void;
   onRenameAccount: (accountId: string, name: string) => void;
   onOpenSettings: () => void;
-  onFetchAllUsage: () => void;
-  onRefetchAccountUsage: (accountId: string) => void;
+  onFetchAllUsage: (options?: { force?: boolean }) => void | Promise<void>;
+  onRefetchAccountUsage: (accountId: string, options?: { force?: boolean }) => void | Promise<AccountUsage>;
 }
 
 function formatResetTime(date: Date | null): string {
@@ -57,10 +57,50 @@ function formatResetTime(date: Date | null): string {
   return `${days}d ${remainingHours}u`;
 }
 
+function getUsageBarColor(percent: number | null, variant: "default" | "mini" = "default") {
+  const pct = percent ?? 0;
+
+  if (variant === "mini") {
+    return pct >= 80 ? "bg-destructive/55" : pct >= 50 ? "bg-amber-500/55" : "bg-emerald-500/55";
+  }
+
+  return pct >= 80 ? "bg-destructive/70" : pct >= 50 ? "bg-amber-500/70" : "bg-emerald-500/70";
+}
+
+function MiniUsageBar({
+  percent,
+  label,
+  loading,
+}: {
+  percent: number | null;
+  label: string;
+  loading?: boolean;
+}) {
+  const pct = percent ?? 0;
+  const hasData = percent !== null;
+
+  return (
+    <div className="flex items-center gap-1.5 min-w-0">
+      <span className="text-[9px] font-medium uppercase tracking-[0.08em] text-muted-foreground/60">
+        {label}
+      </span>
+      <div className="h-1.5 w-10 overflow-hidden rounded-full bg-muted/60 ring-1 ring-border/30">
+        <div
+          className={cn(
+            "h-full rounded-full transition-all duration-500",
+            hasData ? getUsageBarColor(percent) : "bg-muted-foreground/20",
+            loading && "animate-pulse"
+          )}
+          style={{ width: `${Math.min(hasData ? pct : 18, 100)}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
 function UsageBar({ percent, label, resetAt }: { percent: number | null; label: string; resetAt: Date | null }) {
   const pct = percent ?? 0;
-  const color =
-    pct >= 80 ? "bg-destructive/70" : pct >= 50 ? "bg-amber-500/70" : "bg-emerald-500/70";
+  const color = getUsageBarColor(percent);
 
   return (
     <div className="space-y-1">
@@ -105,7 +145,7 @@ function AccountDropdown({
   onOpenChange: (open: boolean) => void;
   onAccountModelChange: (accountId: string, model: string) => void;
   onDeleteAccount: (id: string) => void;
-  onRefetchUsage: (accountId: string) => void;
+  onRefetchUsage: (accountId: string, options?: { force?: boolean }) => void | Promise<AccountUsage>;
   onLinkApiKey: (accountId: string) => void;
   onRenameAccount: (accountId: string, name: string) => void;
   mode: "plan" | "build";
@@ -134,20 +174,55 @@ function AccountDropdown({
       <DropdownMenuTrigger
         onMouseEnter={() => onOpenChange(true)}
         className={cn(
-          "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 font-mono text-xs transition-colors",
+          "flex min-h-[44px] w-[200px] items-center gap-2 rounded-md px-2.5 py-2.5 font-mono text-xs transition-colors border",
           isActive
-            ? "bg-sidebar-accent text-foreground"
-            : "text-muted-foreground/70 hover:text-muted-foreground hover:bg-muted/50"
+            ? "border-border text-foreground"
+            : "border-transparent text-muted-foreground/70 hover:text-muted-foreground hover:bg-muted/50"
         )}
       >
         <div className={cn(
-          "h-1.5 w-1.5 rounded-full shrink-0",
+          "h-1.5 w-1.5 rounded-full shrink-0 self-start mt-0.5",
           isActive
             ? mode === "plan" ? "bg-amber-500" : "bg-blue-500"
             : "bg-muted-foreground/30"
         )} />
-        <span className="truncate max-w-[200px]">{account.name}</span>
-        <ChevronDown className="h-3 w-3 text-muted-foreground/50 shrink-0" />
+          <div className="flex min-w-0 flex-1 flex-col justify-center gap-1">
+            <span className="truncate max-w-[200px] leading-none text-foreground/95">{account.name}</span>
+            <div className="flex flex-col gap-1 text-[10px] leading-none text-muted-foreground/55">
+              <div className="flex min-w-0 items-center gap-1">
+                <span className="text-[9px] font-medium tracking-[0.04em] w-3 text-left">5h</span>
+                <div className="h-[3px] w-8 overflow-hidden rounded-full bg-muted/50 ring-1 ring-border/20">
+                  <div
+                    className={cn(
+                      "h-full rounded-full transition-all duration-500",
+                      getUsageBarColor(usage?.primary.usedPercent ?? null, "mini")
+                    )}
+                    style={{ width: `${Math.min(usage?.primary.usedPercent ?? 0, 100)}%` }}
+                  />
+                </div>
+                <span className="text-[9px] font-medium tracking-[0.04em]">
+                  {usage?.primary.usedPercent != null ? `${Math.round(usage.primary.usedPercent)}%` : "–"}
+                </span>
+              </div>
+              <div className="flex min-w-0 items-center gap-1">
+                <span className="text-[9px] font-medium tracking-[0.04em] w-3 text-left">w</span>
+                <div className="h-[3px] w-8 overflow-hidden rounded-full bg-muted/50 ring-1 ring-border/20">
+                  <div
+                    className={cn(
+                      "h-full rounded-full transition-all duration-500",
+                      getUsageBarColor(usage?.secondary.usedPercent ?? null, "mini")
+                    )}
+                    style={{ width: `${Math.min(usage?.secondary.usedPercent ?? 0, 100)}%` }}
+                  />
+                </div>
+                <span className="text-[9px] font-medium tracking-[0.04em]">
+                  {usage?.secondary.usedPercent != null ? `${Math.round(usage.secondary.usedPercent)}%` : "–"}
+                </span>
+              </div>
+            </div>
+          </div>
+
+        <ChevronDown className="h-3 w-3 text-muted-foreground/50 shrink-0 self-center" />
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="start"
@@ -164,7 +239,7 @@ function AccountDropdown({
               {account.name}
             </DropdownMenuLabel>
             <button
-              onClick={() => onRefetchUsage(account.id)}
+              onClick={() => onRefetchUsage(account.id, { force: true })}
               className="flex items-center justify-center h-5 w-5 rounded text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/50 transition-colors"
               title="Usage vernieuwen"
             >
@@ -349,10 +424,15 @@ export function Topbar({
   }, []);
 
   return (
-    <div className="flex items-center justify-between border-b border-border/30 px-3 py-1.5">
+    <div className="flex items-center justify-between border-b border-border/30 pl-4 pr-6 py-2.5">
       <div className="flex items-center gap-1">
-        <div className="font-mono text-base font-semibold tracking-wider text-foreground/80 mr-3">
-          easai
+        <div className="relative mr-3 opacity-75">
+          <div className="font-mono font-semibold tracking-wider" style={{ fontSize: "2.7rem", background: "linear-gradient(to right, rgb(156,163,175), #fff, rgb(156,163,175))", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text", textShadow: "0 0 20px rgba(255,255,255,0.6), 0 0 40px rgba(255,255,255,0.3)" }}>
+            easai
+          </div>
+          <div className="font-mono font-semibold tracking-wider absolute top-full left-0 opacity-20" style={{ fontSize: "2.7rem", background: "linear-gradient(to right, rgb(156,163,175), #fff, rgb(156,163,175))", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text", transform: "scaleY(-0.5)", maskImage: "linear-gradient(to bottom, rgba(0,0,0,0.5), transparent)", WebkitMaskImage: "linear-gradient(to bottom, rgba(0,0,0,0.5), transparent)" }}>
+            easai
+          </div>
         </div>
         {accounts.map((account) => (
           <AccountDropdown

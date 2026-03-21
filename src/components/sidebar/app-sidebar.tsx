@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -140,6 +140,10 @@ function ProjectItem({
   const [archivedOpen, setArchivedOpen] = useState(false);
 
   const activeSessions = sessions.filter((s) => !s.archived);
+
+  useEffect(() => {
+    if (isActive) setOpen(true);
+  }, [isActive]);
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>

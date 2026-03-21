@@ -3,6 +3,14 @@ import { db } from "@/lib/db";
 import { accounts } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 
+const SERVER_CACHE_TTL_MS = 5 * 60 * 1000;
+type UsageResponseBody = {
+  primary: { usedPercent: number | null; resetAfterSeconds?: number | null; resetAt?: string | null };
+  secondary: { usedPercent: number | null; resetAfterSeconds?: number | null; resetAt?: string | null };
+  raw?: unknown;
+};
+const usageCache = new Map<string, { fetchedAt: number; data: UsageResponseBody }>();
+
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
   try {
     const parts = token.split(".");
@@ -17,9 +25,15 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const accountId = searchParams.get("accountId");
+  const forceRefresh = searchParams.get("force") === "1";
 
   if (!accountId) {
     return NextResponse.json({ error: "Missing accountId" }, { status: 400 });
+  }
+
+  const cached = usageCache.get(accountId);
+  if (!forceRefresh && cached && Date.now() - cached.fetchedAt < SERVER_CACHE_TTL_MS) {
+    return NextResponse.json(cached.data);
   }
 
   const [account] = await db
@@ -90,10 +104,12 @@ export async function GET(request: NextRequest) {
         };
       }
 
-      return NextResponse.json({
+      const payload: UsageResponseBody = {
         primary: { usedPercent: windows.primary?.usedPercent ?? null, resetAfterSeconds: null, resetAt: windows.primary?.resetAt ?? null },
         secondary: { usedPercent: windows.secondary?.usedPercent ?? null, resetAfterSeconds: null, resetAt: windows.secondary?.resetAt ?? null },
-      });
+      };
+      usageCache.set(accountId, { fetchedAt: Date.now(), data: payload });
+      return NextResponse.json(payload);
     } catch (err) {
       return NextResponse.json(
         { error: `Z.AI fetch failed: ${String(err)}` },
@@ -162,7 +178,7 @@ export async function GET(request: NextRequest) {
     const primary = data?.rate_limit?.primary_window || data?.rate_limit?.primaryWindow;
     const secondary = data?.rate_limit?.secondary_window || data?.rate_limit?.secondaryWindow;
 
-    return NextResponse.json({
+    const payload: UsageResponseBody = {
       primary: {
         usedPercent: primary?.used_percent ?? primary?.usedPercent ?? null,
         resetAfterSeconds: primary?.reset_after_seconds ?? primary?.resetAfterSeconds ?? null,
@@ -172,7 +188,9 @@ export async function GET(request: NextRequest) {
         resetAfterSeconds: secondary?.reset_after_seconds ?? secondary?.resetAfterSeconds ?? null,
       },
       raw: data,
-    });
+    };
+    usageCache.set(accountId, { fetchedAt: Date.now(), data: payload });
+    return NextResponse.json(payload);
   } catch (err) {
     if (err instanceof Error && err.name === "AbortError") {
       return NextResponse.json({ error: "Timeout" }, { status: 504 });

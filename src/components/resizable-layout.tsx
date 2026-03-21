@@ -126,7 +126,8 @@ export function ResizableLayout({
     if (!container) return;
     const containerRect = container.getBoundingClientRect();
 
-    draggingWidth.current = storedWidth;
+    setSidebarWidth(storedWidth);
+    setIsDragging(true);
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
 
@@ -142,7 +143,8 @@ export function ResizableLayout({
       const finalWidth = containerRect.right - ev.clientX;
       const clamped = Math.max(MIN_SIDEBAR, Math.min(MAX_SIDEBAR, finalWidth));
       localStorage.setItem(STORAGE_KEY, String(clamped));
-      draggingWidth.current = null;
+      setSidebarWidth(clamped);
+      setIsDragging(false);
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
     };

@@ -59,6 +59,7 @@ function AppShellInner() {
   const [zaiApiKeyOpen, setZaiApiKeyOpen] = useState(false);
   const [zaiApiKeyId, setZaiApiKeyId] = useState<string | null>(null);
   const oauthCleanupRef = useRef<(() => void) | null>(null);
+  const initialProjectLoad = useRef(true);
 
   const accountIds = accounts.map((a) => a.id);
   const { usageMap, fetchAll, refetchAccount } = useAccountUsage(accountIds);
@@ -68,7 +69,6 @@ function AppShellInner() {
     if (dbInitialized.current) return;
     dbInitialized.current = true;
     fetch("/api/init", { method: "POST" }).catch(console.error);
-    if (accountIds.length > 0) fetchAll();
   }, []);
 
   useEffect(() => {
@@ -114,11 +114,26 @@ function AppShellInner() {
 
   useEffect(() => {
     if (!selectedProject) return;
-    setSelectedSession(null); // eslint-disable-line react-hooks/set-state-in-effect
+    if (initialProjectLoad.current) {
+      initialProjectLoad.current = false;
+    } else {
+      setSelectedSession(null);
+      localStorage.removeItem("easai:selectedSessionId");
+    }
     fetchSessions(selectedProject.id);
   }, [selectedProject, fetchSessions]);
 
+  useEffect(() => {
+    if (sessionsLoading || !activeSessions.length) return;
+    const savedSessionId = localStorage.getItem("easai:selectedSessionId");
+    if (savedSessionId && !selectedSession) {
+      const found = activeSessions.find((s) => s.id === savedSessionId);
+      if (found) setSelectedSession(found);
+    }
+  }, [sessionsLoading, activeSessions, selectedSession]);
+
   const handleSelectProject = useCallback((project: Project) => {
+    initialProjectLoad.current = false;
     setSelectedProject(project);
     localStorage.setItem("easai:selectedProjectId", project.id);
   }, []);
@@ -127,6 +142,7 @@ function AppShellInner() {
     async (name: string, workspaceFolder: string) => {
       const project = await createProject({ name, workspaceFolder });
       if (project) {
+        initialProjectLoad.current = false;
         setSelectedProject(project);
         localStorage.setItem("easai:selectedProjectId", project.id);
         toast.success(`Project "${name}" aangemaakt`);
@@ -144,11 +160,13 @@ function AppShellInner() {
     });
     if (session) {
       setSelectedSession(session);
+      localStorage.setItem("easai:selectedSessionId", session.id);
     }
   }, [createSession, selectedProject, selectedAccountId, selectedModel]);
 
   const handleSelectSession = useCallback((session: Session) => {
     setSelectedSession(session);
+    localStorage.setItem("easai:selectedSessionId", session.id);
   }, []);
 
   const handleAccountModelChange = useCallback(
@@ -176,6 +194,7 @@ function AppShellInner() {
       await deleteSession(id);
       if (selectedSession?.id === id) {
         setSelectedSession(null);
+        localStorage.removeItem("easai:selectedSessionId");
       }
       toast.success("Chat verwijderd");
     },
@@ -198,6 +217,7 @@ function AppShellInner() {
       await archiveSession(id);
       if (selectedSession?.id === id) {
         setSelectedSession(null);
+        localStorage.removeItem("easai:selectedSessionId");
       }
     },
     [archiveSession, selectedSession]
@@ -210,6 +230,8 @@ function AppShellInner() {
         setSelectedProject(null);
         localStorage.removeItem("easai:selectedProjectId");
         setSelectedSession(null);
+        localStorage.removeItem("easai:selectedSessionId");
+        initialProjectLoad.current = true;
       }
       toast.success("Project verwijderd");
     },
