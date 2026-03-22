@@ -81,6 +81,7 @@ async function* streamZaiResponse(
   model: string,
   tools: ToolDefinition[],
   systemMessage: string,
+  signal?: AbortSignal,
 ): AsyncGenerator<{ type: "text_delta" | "tool_call"; content?: string; toolCall?: CollectedToolCall }> {
   const modelDef = getModelById(model);
   const apiModel = modelDef?.apiModel || model;
@@ -111,6 +112,7 @@ async function* streamZaiResponse(
       Accept: "text/event-stream",
     },
     body: JSON.stringify(body),
+    signal,
   });
 
   if (!response.ok) {
@@ -199,6 +201,7 @@ export async function* streamChatZai(
   _reasoningEffort: string,
   workspaceFolder?: string,
   mode?: string,
+  signal?: AbortSignal,
 ): AsyncGenerator<StreamEvent> {
   const modelDef = getModelById(modelId);
   if (!modelDef) {
@@ -222,7 +225,7 @@ export async function* streamChatZai(
     for (let iteration = 0; iteration < maxIterations; iteration++) {
       const toolCalls: CollectedToolCall[] = [];
 
-      for await (const event of streamZaiResponse(token, apiMessages, modelId, tools, systemMessage)) {
+      for await (const event of streamZaiResponse(token, apiMessages, modelId, tools, systemMessage, signal)) {
         if (event.type === "text_delta") {
           yield { type: "text_delta", content: event.content };
         } else if (event.type === "tool_call" && event.toolCall) {
@@ -244,29 +247,51 @@ export async function* streamChatZai(
         };
       }
 
-      const toolPromises = toolCalls.map(async (tc) => {
-        let parsedArgs: Record<string, unknown> = {};
-        try {
-          parsedArgs = JSON.parse(tc.arguments);
-        } catch {
-          parsedArgs = {};
-        }
+      const pending = new Map<number, Promise<{ tc: CollectedToolCall; resultText: string }>>();
 
-        const result = await executeTool(
-          tc.name,
-          parsedArgs,
-          workspaceFolder || process.cwd(),
-          readFiles,
-          { apiKey: token, model: modelId, provider: "zai" },
+      for (const [index, tc] of toolCalls.entries()) {
+        const promise = (async () => {
+          let parsedArgs: Record<string, unknown> = {};
+          try {
+            parsedArgs = JSON.parse(tc.arguments);
+          } catch {
+            parsedArgs = {};
+          }
+
+          const result = await executeTool(
+            tc.name,
+            parsedArgs,
+            workspaceFolder || process.cwd(),
+            readFiles,
+            { apiKey: token, model: modelId, provider: "zai" },
+            signal,
+          );
+
+          const resultText = result.error ? `Error: ${result.error}` : result.output;
+          return { tc, resultText };
+        })();
+
+        pending.set(index, promise);
+      }
+
+      while (pending.size > 0) {
+        const raced = await Promise.race(
+          Array.from(pending.entries()).map(([index, promise]) =>
+            promise
+              .then((value) => ({ index, value }))
+              .catch((err) => ({
+                index,
+                value: {
+                  tc: toolCalls[index],
+                  resultText: `Error: ${err instanceof Error ? err.message : String(err)}`,
+                },
+              }))
+          )
         );
-        const resultText = result.error ? `Error: ${result.error}` : result.output;
 
-        return { tc, resultText };
-      });
+        pending.delete(raced.index);
 
-      const results = await Promise.all(toolPromises);
-
-      for (const { tc, resultText } of results) {
+        const { tc, resultText } = raced.value;
         toolCallRecords.push({
           id: tc.id,
           name: tc.name,
@@ -303,6 +328,9 @@ export async function* streamChatZai(
 
     yield { type: "error", error: "Max tool call iterations reached" };
   } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw error;
+    }
     yield {
       type: "error",
       error: error instanceof Error ? error.message : "Unknown error",

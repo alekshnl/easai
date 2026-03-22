@@ -252,6 +252,7 @@ export interface WorkerContext {
   model: string;
   provider: "openai" | "zai";
   workspaceFolder: string;
+  signal?: AbortSignal;
   executeToolFn: (
     name: string,
     args: Record<string, unknown>,
@@ -264,7 +265,7 @@ export async function runWorkerAgent(
   prompt: string,
   context: WorkerContext,
 ): Promise<string> {
-  const { apiKey, model, provider, workspaceFolder, executeToolFn } = context;
+  const { apiKey, model, provider, workspaceFolder, executeToolFn, signal } = context;
 
   const tools = TOOL_DEFINITIONS;
   const readFiles = new Set<string>();
@@ -281,6 +282,10 @@ export async function runWorkerAgent(
     let finalContent = "";
 
     for (let iteration = 0; iteration < MAX_WORKER_ITERATIONS; iteration++) {
+      if (signal?.aborted) {
+        throw new DOMException("Worker cancelled", "AbortError");
+      }
+
       const toolCalls: CollectedToolCall[] = [];
       let iterationContent = "";
 

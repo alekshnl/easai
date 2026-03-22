@@ -20,6 +20,11 @@ export interface AccountUsage {
   refreshing: boolean;
 }
 
+export interface FetchAllUsageOptions {
+  force?: boolean;
+  resetTimer?: boolean;
+}
+
 const EMPTY_USAGE: AccountUsage = {
   primary: { usedPercent: null, resetAfterSeconds: null, resetAt: null },
   secondary: { usedPercent: null, resetAfterSeconds: null, resetAt: null },
@@ -121,10 +126,24 @@ export function useAccountUsage(accountIds: string[]) {
     return initial;
   });
   const usageMapRef = useRef<Record<string, AccountUsage>>({});
+  const accountIdsRef = useRef<string[]>(accountIds);
+  const [refreshCycleStartAt, setRefreshCycleStartAt] = useState<number | null>(() => (accountIds.length > 0 ? Date.now() : null));
 
   useEffect(() => {
     usageMapRef.current = usageMap;
   }, [usageMap]);
+
+  useEffect(() => {
+    accountIdsRef.current = accountIds;
+  }, [accountIds.join(",")]);
+
+  useEffect(() => {
+    if (accountIds.length === 0) {
+      setRefreshCycleStartAt(null);
+    } else if (refreshCycleStartAt === null) {
+      setRefreshCycleStartAt(Date.now());
+    }
+  }, [accountIds.join(","), refreshCycleStartAt]);
 
   const refetchAccount = useCallback(async (accountId: string, options?: { force?: boolean }) => {
     const current = usageMapRef.current[accountId] || CLIENT_USAGE_CACHE.get(accountId);
@@ -165,8 +184,11 @@ export function useAccountUsage(accountIds: string[]) {
   }, []);
 
   const accountIdsKey = accountIds.join(",");
-  const fetchAll = useCallback(async (options?: { force?: boolean }) => {
-    await Promise.allSettled(accountIds.map((id) => refetchAccount(id, options)));
+  const fetchAll = useCallback(async (options?: FetchAllUsageOptions) => {
+    if (options?.resetTimer) {
+      setRefreshCycleStartAt(Date.now());
+    }
+    await Promise.allSettled(accountIdsRef.current.map((id) => refetchAccount(id, options)));
   }, [accountIdsKey, refetchAccount]);
 
   useEffect(() => {
@@ -198,13 +220,25 @@ export function useAccountUsage(accountIds: string[]) {
     }
 
     void fetchAll();
+    setRefreshCycleStartAt(Date.now());
 
-    const interval = setInterval(() => {
-      void fetchAll();
-    }, CACHE_TTL_MS);
-
-    return () => clearInterval(interval);
+    return undefined;
   }, [accountIdsKey, fetchAll]);
 
-  return { usageMap, fetchAll, refetchAccount };
+  useEffect(() => {
+    if (accountIds.length === 0 || refreshCycleStartAt === null) {
+      return;
+    }
+
+    const elapsed = Date.now() - refreshCycleStartAt;
+    const delay = Math.max(0, CACHE_TTL_MS - elapsed);
+
+    const timeout = setTimeout(() => {
+      void fetchAll({ resetTimer: true });
+    }, delay);
+
+    return () => clearTimeout(timeout);
+  }, [accountIdsKey, fetchAll, refreshCycleStartAt]);
+
+  return { usageMap, fetchAll, refetchAccount, refreshCycleStartAt };
 }

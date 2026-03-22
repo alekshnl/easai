@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useEffect, useRef, useCallback } from "react";
-import { MessageBubble, StreamingBubble } from "./message-bubble";
+import React, { useEffect, useRef, useCallback, useMemo } from "react";
+import { MessageBubble } from "./message-bubble";
 import type { Message } from "@/hooks/use-chat";
 import type { ToolCallDisplayData } from "./actions-panel";
 
@@ -52,6 +52,23 @@ export function MessageList({
     bottomRef.current?.scrollIntoView({ behavior: "instant" });
   }, [messages.length]);
 
+  const latestActiveAssistantMessageId = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const msg = messages[i];
+      if (msg.role !== "assistant" || !msg.metadata) continue;
+      try {
+        const parsed = JSON.parse(msg.metadata) as { job?: { status?: string } };
+        const status = parsed.job?.status;
+        if (status === "pending" || status === "running") {
+          return msg.id;
+        }
+      } catch {
+        // ignore malformed metadata
+      }
+    }
+    return null;
+  }, [messages]);
+
   if (messages.length === 0 && !streaming) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
@@ -68,16 +85,17 @@ export function MessageList({
   return (
     <div ref={scrollRef} className="flex-1 overflow-y-auto">
       <div className="flex flex-col py-4">
-        {messages.map((msg) => (
-          <MessageBubble key={msg.id} message={msg} />
-        ))}
-        {streaming && (
-          <StreamingBubble
-            content={streamingContent}
-            activeToolCalls={activeToolCalls}
-            mode={mode}
-          />
-        )}
+        {messages.map((msg) => {
+          const shouldInjectLiveActions =
+            msg.id === latestActiveAssistantMessageId && activeToolCalls.length > 0;
+          return (
+            <MessageBubble
+              key={msg.id}
+              message={msg}
+              overrideToolCalls={shouldInjectLiveActions ? activeToolCalls : undefined}
+            />
+          );
+        })}
         {error && (
           <div className="mx-4 my-2 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-2 font-mono text-xs text-destructive">
             {error}

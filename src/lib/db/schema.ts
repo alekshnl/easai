@@ -54,6 +54,37 @@ export const settings = sqliteTable("settings", {
   value: text("value").notNull(),
 });
 
+export const jobs = sqliteTable("jobs", {
+  id: text("id").primaryKey(),
+  sessionId: text("session_id").notNull(),
+  accountId: text("account_id").notNull(),
+  model: text("model").notNull(),
+  reasoningEffort: text("reasoning_effort").notNull().default("medium"),
+  mode: text("mode").notNull().default("build"),
+  status: text("status").notNull().default("pending"),
+  userMessageId: text("user_message_id").notNull(),
+  assistantMessageId: text("assistant_message_id").notNull(),
+  historySnapshot: text("history_snapshot").notNull(),
+  cancelRequestedAt: integer("cancel_requested_at"),
+  queuedAt: integer("queued_at").notNull(),
+  startedAt: integer("started_at"),
+  finishedAt: integer("finished_at"),
+  failedAt: integer("failed_at"),
+  cancelledAt: integer("cancelled_at"),
+  error: text("error"),
+  updatedAt: integer("updated_at").notNull(),
+});
+
+export const jobEvents = sqliteTable("job_events", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  jobId: text("job_id").notNull(),
+  sessionId: text("session_id").notNull(),
+  messageId: text("message_id").notNull(),
+  type: text("type").notNull(),
+  payload: text("payload").notNull(),
+  createdAt: integer("created_at").notNull(),
+});
+
 export type Account = typeof accounts.$inferSelect;
 export type NewAccount = typeof accounts.$inferInsert;
 export type Project = typeof projects.$inferSelect;
@@ -63,3 +94,10 @@ export type NewSession = typeof sessions.$inferInsert;
 export type Message = typeof messages.$inferSelect;
 export type NewMessage = typeof messages.$inferInsert;
 export type Setting = typeof settings.$inferSelect;
+export type Job = typeof jobs.$inferSelect;
+export type NewJob = typeof jobs.$inferInsert;
+export type JobEvent = typeof jobEvents.$inferSelect;
+export type NewJobEvent = typeof jobEvents.$inferInsert;
+
+export type JobStatus = "pending" | "running" | "completed" | "failed" | "cancelled";
+export type JobMode = "plan" | "build";

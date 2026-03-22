@@ -93,6 +93,7 @@ async function* streamResponse(
   tools: ToolDefinition[],
   reasoningEffort: ReasoningEffort,
   instructions: string,
+  signal?: AbortSignal,
 ): AsyncGenerator<{ type: "text_delta" | "tool_call"; content?: string; toolCall?: CollectedToolCall }> {
   const useChatGptEndpoint = isChatGptToken(apiKey);
   const baseUrl = useChatGptEndpoint ? CHATGPT_BASE_URL : OPENAI_BASE_URL;
@@ -129,6 +130,7 @@ async function* streamResponse(
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify(body),
+    signal,
   });
 
   if (!response.ok) {
@@ -207,6 +209,7 @@ export async function* streamChat(
   reasoningEffort: ReasoningEffort = "medium",
   workspaceFolder?: string,
   mode?: string,
+  signal?: AbortSignal,
 ): AsyncGenerator<StreamEvent> {
   const modelDef = getModelById(modelId);
   if (!modelDef) {
@@ -229,7 +232,7 @@ export async function* streamChat(
     for (let iteration = 0; iteration < maxIterations; iteration++) {
       const toolCalls: CollectedToolCall[] = [];
 
-      for await (const event of streamResponse(apiKey, input, modelId, tools, reasoningEffort, instructions)) {
+      for await (const event of streamResponse(apiKey, input, modelId, tools, reasoningEffort, instructions, signal)) {
         if (event.type === "text_delta") {
           yield { type: "text_delta", content: event.content };
         } else if (event.type === "tool_call" && event.toolCall) {
@@ -251,35 +254,54 @@ export async function* streamChat(
         };
       }
 
-      const toolPromises = toolCalls.map(async (tc) => {
-        let parsedArgs: Record<string, unknown> = {};
-        try {
-          parsedArgs = JSON.parse(tc.arguments);
-        } catch {
-          parsedArgs = {};
-        }
+      const pending = new Map<number, Promise<{ tc: CollectedToolCall; resultText: string }>>();
 
-        const result = await executeTool(
-          tc.name,
-          parsedArgs,
-          workspaceFolder || process.cwd(),
-          readFiles,
-          { apiKey, model: modelId, provider: "openai" },
+      for (const [index, tc] of toolCalls.entries()) {
+        const promise = (async () => {
+          let parsedArgs: Record<string, unknown> = {};
+          try {
+            parsedArgs = JSON.parse(tc.arguments);
+          } catch {
+            parsedArgs = {};
+          }
+
+          const result = await executeTool(
+            tc.name,
+            parsedArgs,
+            workspaceFolder || process.cwd(),
+            readFiles,
+            { apiKey, model: modelId, provider: "openai" },
+            signal,
+          );
+
+          const resultText = result.error
+            ? `Error: ${result.error}`
+            : result.output;
+
+          return { tc, resultText };
+        })();
+
+        pending.set(index, promise);
+      }
+
+      while (pending.size > 0) {
+        const raced = await Promise.race(
+          Array.from(pending.entries()).map(([index, promise]) =>
+            promise
+              .then((value) => ({ index, value }))
+              .catch((err) => ({
+                index,
+                value: {
+                  tc: toolCalls[index],
+                  resultText: `Error: ${err instanceof Error ? err.message : String(err)}`,
+                },
+              }))
+          )
         );
 
-        const resultText = result.error
-          ? `Error: ${result.error}`
-          : result.output;
+        pending.delete(raced.index);
 
-        return {
-          tc,
-          resultText,
-        };
-      });
-
-      const results = await Promise.all(toolPromises);
-
-      for (const { tc, resultText } of results) {
+        const { tc, resultText } = raced.value;
         toolCallRecords.push({
           id: tc.callId,
           name: tc.name,
@@ -312,6 +334,9 @@ export async function* streamChat(
 
     yield { type: "error", error: "Max tool call iterations reached" };
   } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw error;
+    }
     yield {
       type: "error",
       error: error instanceof Error ? error.message : "Unknown error",

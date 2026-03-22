@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -36,9 +36,12 @@ interface TopbarProps {
   onLinkApiKey: (accountId: string) => void;
   onRenameAccount: (accountId: string, name: string) => void;
   onOpenSettings: () => void;
-  onFetchAllUsage: (options?: { force?: boolean }) => void | Promise<void>;
+  onFetchAllUsage: (options?: { force?: boolean; resetTimer?: boolean }) => void | Promise<void>;
   onRefetchAccountUsage: (accountId: string, options?: { force?: boolean }) => void | Promise<AccountUsage>;
+  refreshCycleStartAt: number | null;
 }
+
+const METRICS_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
 function formatResetTime(date: Date | null): string {
   if (!date) return "";
@@ -190,8 +193,8 @@ function AccountDropdown({
             <span className="truncate max-w-[200px] leading-none text-foreground/95">{account.name}</span>
             <div className="flex flex-col gap-1 text-[10px] leading-none text-muted-foreground/55">
               <div className="flex min-w-0 items-center gap-1">
-                <span className="text-[9px] font-medium tracking-[0.04em] w-3 text-left">5h</span>
-                <div className="h-[3px] w-8 overflow-hidden rounded-full bg-muted/50 ring-1 ring-border/20">
+                <span className="text-[9px] font-medium tracking-[0.04em] w-3 shrink-0 text-left">5h</span>
+                <div className="h-[3px] min-w-0 flex-1 overflow-hidden rounded-full bg-muted/50 ring-1 ring-border/20">
                   <div
                     className={cn(
                       "h-full rounded-full transition-all duration-500",
@@ -200,13 +203,13 @@ function AccountDropdown({
                     style={{ width: `${Math.min(usage?.primary.usedPercent ?? 0, 100)}%` }}
                   />
                 </div>
-                <span className="text-[9px] font-medium tracking-[0.04em]">
+                <span className="text-[9px] font-medium tracking-[0.04em] shrink-0">
                   {usage?.primary.usedPercent != null ? `${Math.round(usage.primary.usedPercent)}%` : "–"}
                 </span>
               </div>
               <div className="flex min-w-0 items-center gap-1">
-                <span className="text-[9px] font-medium tracking-[0.04em] w-3 text-left">w</span>
-                <div className="h-[3px] w-8 overflow-hidden rounded-full bg-muted/50 ring-1 ring-border/20">
+                <span className="text-[9px] font-medium tracking-[0.04em] w-3 shrink-0 text-left">w</span>
+                <div className="h-[3px] min-w-0 flex-1 overflow-hidden rounded-full bg-muted/50 ring-1 ring-border/20">
                   <div
                     className={cn(
                       "h-full rounded-full transition-all duration-500",
@@ -215,7 +218,7 @@ function AccountDropdown({
                     style={{ width: `${Math.min(usage?.secondary.usedPercent ?? 0, 100)}%` }}
                   />
                 </div>
-                <span className="text-[9px] font-medium tracking-[0.04em]">
+                <span className="text-[9px] font-medium tracking-[0.04em] shrink-0">
                   {usage?.secondary.usedPercent != null ? `${Math.round(usage.secondary.usedPercent)}%` : "–"}
                 </span>
               </div>
@@ -416,8 +419,30 @@ export function Topbar({
   onRefetchAccountUsage,
   onLinkApiKey,
   onRenameAccount,
+  refreshCycleStartAt,
 }: TopbarProps) {
   const [openAccountId, setOpenAccountId] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const metricsCountdownLabel = useMemo(() => {
+    if (accounts.length === 0 || refreshCycleStartAt === null) {
+      return null;
+    }
+
+    const nextRefreshAt = refreshCycleStartAt + METRICS_REFRESH_INTERVAL_MS;
+    const remainingMs = Math.max(0, nextRefreshAt - now);
+    const totalSeconds = Math.ceil(remainingMs / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}m${seconds}s`;
+  }, [accounts.length, refreshCycleStartAt, now]);
 
   const handleOpenChange = useCallback((accountId: string, open: boolean) => {
     setOpenAccountId(open ? accountId : null);
@@ -456,6 +481,19 @@ export function Topbar({
       </div>
 
       <div className="flex items-center gap-3">
+        {metricsCountdownLabel !== null && (
+          <button
+            type="button"
+            className="flex items-center gap-1 text-muted-foreground/72 transition-colors hover:text-muted-foreground"
+            title="Klik om alle metrics nu te verversen"
+            onClick={() => {
+              void onFetchAllUsage({ force: true, resetTimer: true });
+            }}
+          >
+            <RefreshCw className="h-3 w-3" />
+            <span className="font-mono text-[10px] tracking-[0.06em]">{metricsCountdownLabel}</span>
+          </button>
+        )}
         <Button
           variant="ghost"
           size="icon"

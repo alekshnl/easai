@@ -52,6 +52,9 @@ export async function initializeDatabase() {
   const client = getClient();
 
   await client.executeMultiple(`
+    PRAGMA journal_mode = WAL;
+    PRAGMA busy_timeout = 5000;
+
     CREATE TABLE IF NOT EXISTS projects (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -106,7 +109,39 @@ export async function initializeDatabase() {
       value TEXT NOT NULL
     );
 
-    ALTER TABLE sessions ADD COLUMN project_id TEXT;
-    ALTER TABLE sessions ADD COLUMN workspace_folder TEXT;
+    CREATE TABLE IF NOT EXISTS jobs (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      account_id TEXT NOT NULL,
+      model TEXT NOT NULL,
+      reasoning_effort TEXT NOT NULL DEFAULT 'medium',
+      mode TEXT NOT NULL DEFAULT 'build',
+      status TEXT NOT NULL DEFAULT 'pending',
+      user_message_id TEXT NOT NULL,
+      assistant_message_id TEXT NOT NULL,
+      history_snapshot TEXT NOT NULL,
+      cancel_requested_at INTEGER,
+      queued_at INTEGER NOT NULL,
+      started_at INTEGER,
+      finished_at INTEGER,
+      failed_at INTEGER,
+      cancelled_at INTEGER,
+      error TEXT,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS job_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      job_id TEXT NOT NULL,
+      session_id TEXT NOT NULL,
+      message_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_jobs_session_status_queued ON jobs(session_id, status, queued_at);
+    CREATE INDEX IF NOT EXISTS idx_job_events_session_id ON job_events(session_id, id);
+    CREATE INDEX IF NOT EXISTS idx_job_events_job_id ON job_events(job_id, id);
   `);
 }

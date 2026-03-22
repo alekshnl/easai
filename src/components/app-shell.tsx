@@ -62,7 +62,7 @@ function AppShellInner() {
   const initialProjectLoad = useRef(true);
 
   const accountIds = accounts.map((a) => a.id);
-  const { usageMap, fetchAll, refetchAccount } = useAccountUsage(accountIds);
+  const { usageMap, fetchAll, refetchAccount, refreshCycleStartAt } = useAccountUsage(accountIds);
 
   const dbInitialized = useRef(false);
   useEffect(() => {
@@ -288,6 +288,7 @@ function AppShellInner() {
           onOpenSettings={() => setSettingsOpen(true)}
           onFetchAllUsage={fetchAll}
           onRefetchAccountUsage={refetchAccount}
+          refreshCycleStartAt={refreshCycleStartAt}
           onLinkApiKey={handleLinkApiKey}
           onRenameAccount={async (accountId, name) => {
             await fetch(`/api/accounts`, {

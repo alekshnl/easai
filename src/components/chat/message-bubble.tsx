@@ -8,6 +8,7 @@ import type { Message } from "@/hooks/use-chat";
 
 interface MessageBubbleProps {
   message: Message;
+  overrideToolCalls?: ToolCallDisplayData[];
 }
 
 function parsePersistedToolCalls(metadata: string | null | undefined): ToolCallDisplayData[] {
@@ -19,9 +20,9 @@ function parsePersistedToolCalls(metadata: string | null | undefined): ToolCallD
     return calls.map((tc: Record<string, unknown>) => ({
       id: String(tc.id || ""),
       name: String(tc.name || "unknown"),
-      arguments: "",
+      arguments: String(tc.arguments || ""),
       result: tc.result ? String(tc.result) : undefined,
-      status: "completed" as const,
+      status: (tc.status === "running" || tc.status === "error" ? tc.status : "completed") as "running" | "completed" | "error",
       workerId: tc.workerId ? String(tc.workerId) : "Main",
     }));
   } catch {
@@ -29,9 +30,22 @@ function parsePersistedToolCalls(metadata: string | null | undefined): ToolCallD
   }
 }
 
-export function MessageBubble({ message }: MessageBubbleProps) {
+function parseJobStatus(metadata: string | null | undefined): string | null {
+  if (!metadata) return null;
+  try {
+    const parsed = JSON.parse(metadata);
+    const status = parsed?.job?.status;
+    return typeof status === "string" ? status : null;
+  } catch {
+    return null;
+  }
+}
+
+export function MessageBubble({ message, overrideToolCalls }: MessageBubbleProps) {
   const isUser = message.role === "user";
-  const toolCalls = useMemo(() => parsePersistedToolCalls(message.metadata), [message.metadata]);
+  const persistedToolCalls = useMemo(() => parsePersistedToolCalls(message.metadata), [message.metadata]);
+  const toolCalls = overrideToolCalls && overrideToolCalls.length > 0 ? overrideToolCalls : persistedToolCalls;
+  const jobStatus = useMemo(() => parseJobStatus(message.metadata), [message.metadata]);
   const hasActions = toolCalls.length > 0;
   
   const messageMode = useMemo(() => {
@@ -81,6 +95,9 @@ export function MessageBubble({ message }: MessageBubbleProps) {
               {!isUser && message.model && (
                 <div className="mt-1 text-[9px] text-muted-foreground/50 font-mono">
                   {message.model}
+                  {jobStatus && (
+                    <span className="ml-2">[{jobStatus}]</span>
+                  )}
                 </div>
               )}
             </div>
