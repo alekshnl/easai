@@ -1,6 +1,7 @@
 import { getModelById } from "@/lib/models";
 import { TOOL_DEFINITIONS } from "@/lib/tools/definitions";
 import { executeTool } from "@/lib/tools/executor";
+import { getProviderInstruction } from "@/lib/db/provider-instructions";
 import type { ToolDefinition } from "@/lib/tools/types";
 
 export interface ChatMessage {
@@ -35,7 +36,12 @@ export interface ToolCallRecord {
 
 const ZAI_BASE_URL = "https://api.z.ai/api/coding/paas/v4/chat/completions";
 
-function buildSystemMessage(workspaceFolder?: string, mode?: string): string {
+async function buildSystemMessage(
+  workspaceFolder?: string,
+  mode?: string,
+  provider?: string,
+  isFirstPrompt?: boolean
+): Promise<string> {
   let system = "You are a helpful coding assistant. Be concise and direct.\n\n";
   system += "You have access to tools that let you interact with the local filesystem, run commands, and search the web. ";
   system += "Use them proactively when the user asks about files, code, or anything that requires accessing local data.\n\n";
@@ -55,7 +61,7 @@ function buildSystemMessage(workspaceFolder?: string, mode?: string): string {
   system += "- Assign DIFFERENT files to each worker to avoid conflicts\n";
   system += "- Be specific in each worker's prompt: exact files, exact changes\n";
   system += "- Collect all results and summarize for the user\n";
-  system += "- Example: 3 workers = 3 task calls in one message, each with different files\n";
+  system += "- Example:3 workers = 3 task calls in one message, each with different files\n";
   if (mode === "plan") {
     system += "\n## Mode: Plan\n";
     system += "You are in PLAN mode. Do NOT write code, edit files, or execute commands.\n";
@@ -66,6 +72,21 @@ function buildSystemMessage(workspaceFolder?: string, mode?: string): string {
     system += "You are in BUILD mode. Execute the task: write code, edit files, run commands as needed.\n";
     system += "Be proactive — use tools to explore the codebase, make changes, and verify your work.\n";
   }
+
+  if (provider && mode) {
+    try {
+      const config = await getProviderInstruction(provider, mode);
+      const shouldInclude = config?.repeatEveryPrompt || isFirstPrompt;
+
+      if (shouldInclude && config?.instruction) {
+        system += "\n\n## Custom Instructions\n";
+        system += config.instruction;
+      }
+    } catch (error) {
+      console.error("Error fetching provider instruction:", error);
+    }
+  }
+
   return system;
 }
 
@@ -201,6 +222,8 @@ export async function* streamChatZai(
   _reasoningEffort: string,
   workspaceFolder?: string,
   mode?: string,
+  provider?: string,
+  isFirstPrompt?: boolean,
   signal?: AbortSignal,
 ): AsyncGenerator<StreamEvent> {
   const modelDef = getModelById(modelId);
@@ -210,7 +233,7 @@ export async function* streamChatZai(
   }
 
   const tools = TOOL_DEFINITIONS;
-  const systemMessage = buildSystemMessage(workspaceFolder, mode);
+  const systemMessage = await buildSystemMessage(workspaceFolder, mode, provider, isFirstPrompt);
 
   const apiMessages: Array<Record<string, unknown>> = [
     { role: "system", content: systemMessage },

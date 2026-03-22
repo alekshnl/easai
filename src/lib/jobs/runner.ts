@@ -120,11 +120,12 @@ export async function runJob(job: Job, signal: AbortSignal): Promise<void> {
     const history = parseHistorySnapshot(job.historySnapshot);
 
     const [session] = await db
-      .select({ workspaceFolder: sessions.workspaceFolder })
+      .select({ workspaceFolder: sessions.workspaceFolder, messageCount: sessions.messageCount })
       .from(sessions)
       .where(eq(sessions.id, job.sessionId));
 
     const workspaceFolder = session?.workspaceFolder || process.cwd();
+    const isFirstPrompt = (session?.messageCount || 0) <= 1;
 
     const [account] = await db
       .select()
@@ -166,6 +167,8 @@ export async function runJob(job: Job, signal: AbortSignal): Promise<void> {
           job.reasoningEffort,
           workspaceFolder,
           job.mode,
+          account.provider,
+          isFirstPrompt,
           signal,
         )
       : streamChat(
@@ -175,6 +178,8 @@ export async function runJob(job: Job, signal: AbortSignal): Promise<void> {
           job.reasoningEffort as ReasoningEffort,
           workspaceFolder,
           job.mode,
+          account.provider,
+          isFirstPrompt,
           signal,
         );
 

@@ -303,23 +303,23 @@ function ChatItem({
 
   return (
     <>
-      <div className="group/chat-item flex items-center">
+      <div className="group/chat-item flex items-center min-w-0">
         <button
           onClick={onSelect}
           onDoubleClick={handleDoubleClick}
           className={cn(
-            "flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors",
+            "flex flex-1 items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors min-w-0",
             isActive
               ? "bg-sidebar-accent text-sidebar-accent-foreground"
               : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
           )}
         >
           <span className="h-1 w-1 rounded-full shrink-0 bg-muted-foreground/30" />
-          <span className="truncate text-[11px]">{session.title}</span>
+          <span className="truncate text-[11px] min-w-0">{session.title}</span>
         </button>
         <DropdownMenu>
           <DropdownMenuTrigger
-            className="flex h-6 w-5 items-center justify-center text-muted-foreground/30 hover:text-muted-foreground/60 opacity-0 group-hover/chat-item:opacity-100 transition-opacity shrink-0"
+            className="flex h-6 w-5 items-center justify-center text-muted-foreground/30 hover:text-muted-foreground/60 shrink-0"
           >
             <MoreHorizontal className="h-3 w-3" />
           </DropdownMenuTrigger>

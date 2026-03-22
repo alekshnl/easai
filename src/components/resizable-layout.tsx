@@ -7,10 +7,10 @@ import { FolderOpen, GitBranch } from "lucide-react";
 import type { Session } from "@/hooks/use-sessions";
 import type { Project } from "@/hooks/use-projects";
 
-const MIN_SIDEBAR = 200;
-const MAX_SIDEBAR = 600;
-const DEFAULT_SIDEBAR = 320;
-const STORAGE_KEY = "easai:sidebarWidth";
+const MIN_SIDEBAR_PERCENT = 15;
+const MAX_SIDEBAR_PERCENT = 50;
+const DEFAULT_SIDEBAR_PERCENT = 25;
+const STORAGE_KEY = "easai:sidebarWidthPercent";
 
 function subscribe() { return () => {} }
 
@@ -19,16 +19,16 @@ function getSnapshot(): number {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = parseFloat(saved);
-      if (!isNaN(parsed) && parsed >= MIN_SIDEBAR && parsed <= MAX_SIDEBAR) {
+      if (!isNaN(parsed) && parsed >= MIN_SIDEBAR_PERCENT && parsed <= MAX_SIDEBAR_PERCENT) {
         return parsed;
       }
     }
   } catch {}
-  return DEFAULT_SIDEBAR;
+  return DEFAULT_SIDEBAR_PERCENT;
 }
 
 function getServerSnapshot(): number {
-  return DEFAULT_SIDEBAR;
+  return DEFAULT_SIDEBAR_PERCENT;
 }
 
 export function ResizableLayout({
@@ -81,11 +81,11 @@ export function ResizableLayout({
   onModeChange: (mode: "plan" | "build") => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR);
+  const [sidebarWidthPercent, setSidebarWidthPercent] = useState(DEFAULT_SIDEBAR_PERCENT);
   const [gitBranch, setGitBranch] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const storedWidth = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
-  const displayWidth = isDragging ? sidebarWidth : storedWidth;
+  const storedWidthPercent = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const displayWidthPercent = isDragging ? sidebarWidthPercent : storedWidthPercent;
 
   useEffect(() => {
     if (!currentWorkspace) {
@@ -126,24 +126,26 @@ export function ResizableLayout({
     if (!container) return;
     const containerRect = container.getBoundingClientRect();
 
-    setSidebarWidth(storedWidth);
+    setSidebarWidthPercent(storedWidthPercent);
     setIsDragging(true);
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
 
     const handleMouseMove = (ev: MouseEvent) => {
       const newWidth = containerRect.right - ev.clientX;
-      const clamped = Math.max(MIN_SIDEBAR, Math.min(MAX_SIDEBAR, newWidth));
-      setSidebarWidth(clamped);
+      const newPercent = (newWidth / containerRect.width) * 100;
+      const clamped = Math.max(MIN_SIDEBAR_PERCENT, Math.min(MAX_SIDEBAR_PERCENT, newPercent));
+      setSidebarWidthPercent(clamped);
     };
 
     const handleMouseUp = (ev: MouseEvent) => {
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
       const finalWidth = containerRect.right - ev.clientX;
-      const clamped = Math.max(MIN_SIDEBAR, Math.min(MAX_SIDEBAR, finalWidth));
+      const finalPercent = (finalWidth / containerRect.width) * 100;
+      const clamped = Math.max(MIN_SIDEBAR_PERCENT, Math.min(MAX_SIDEBAR_PERCENT, finalPercent));
       localStorage.setItem(STORAGE_KEY, String(clamped));
-      setSidebarWidth(clamped);
+      setSidebarWidthPercent(clamped);
       setIsDragging(false);
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
@@ -151,7 +153,7 @@ export function ResizableLayout({
 
     document.addEventListener("mousemove", handleMouseMove);
     document.addEventListener("mouseup", handleMouseUp);
-  }, [storedWidth]);
+  }, [storedWidthPercent]);
 
   return (
     <div ref={containerRef} className="flex flex-1 overflow-hidden">
@@ -195,7 +197,7 @@ export function ResizableLayout({
       />
 
       <div
-        style={{ width: displayWidth, minWidth: MIN_SIDEBAR, maxWidth: MAX_SIDEBAR }}
+        style={{ width: `${displayWidthPercent}%`, minWidth: `${MIN_SIDEBAR_PERCENT}%`, maxWidth: `${MAX_SIDEBAR_PERCENT}%` }}
         className="shrink-0 overflow-hidden"
       >
         <AppSidebar

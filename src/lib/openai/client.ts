@@ -1,6 +1,7 @@
 import { getModelById } from "./models";
 import { TOOL_DEFINITIONS } from "@/lib/tools/definitions";
 import { executeTool } from "@/lib/tools/executor";
+import { getProviderInstruction } from "@/lib/db/provider-instructions";
 import type { ToolDefinition } from "@/lib/tools/types";
 
 export interface ChatMessage {
@@ -42,9 +43,14 @@ function isChatGptToken(token: string): boolean {
   return !token.startsWith("sk-") && token.split(".").length === 3;
 }
 
-function buildInstructions(workspaceFolder?: string, mode?: string): string {
+async function buildInstructions(
+  workspaceFolder?: string,
+  mode?: string,
+  provider?: string,
+  isFirstPrompt?: boolean
+): Promise<string> {
   let instructions = "You are a helpful coding assistant. Be concise and direct.\n\n";
-  instructions += "You have access to tools that let you interact with the local filesystem, run commands, and search the web. ";
+  instructions += "You have access to tools that let you interact with local filesystem, run commands, and search the web. ";
   instructions += "Use them proactively when the user asks about files, code, or anything that requires accessing local data.\n\n";
   instructions += "When listing or reading files, prefer the specialized tools (list, read, glob, grep) over bash commands.\n";
   instructions += "When editing files, use the edit tool for targeted changes and write for creating new files.\n";
@@ -77,6 +83,21 @@ function buildInstructions(workspaceFolder?: string, mode?: string): string {
     instructions += "You are in BUILD mode. Execute the task: write code, edit files, run commands as needed.\n";
     instructions += "Be proactive — use tools to explore the codebase, make changes, and verify your work.\n";
   }
+
+  if (provider && mode) {
+    try {
+      const config = await getProviderInstruction(provider, mode);
+      const shouldInclude = config?.repeatEveryPrompt || isFirstPrompt;
+
+      if (shouldInclude && config?.instruction) {
+        instructions += "\n\n## Custom Instructions\n";
+        instructions += config.instruction;
+      }
+    } catch (error) {
+      console.error("Error fetching provider instruction:", error);
+    }
+  }
+
   return instructions;
 }
 
@@ -209,6 +230,8 @@ export async function* streamChat(
   reasoningEffort: ReasoningEffort = "medium",
   workspaceFolder?: string,
   mode?: string,
+  provider?: string,
+  isFirstPrompt?: boolean,
   signal?: AbortSignal,
 ): AsyncGenerator<StreamEvent> {
   const modelDef = getModelById(modelId);
@@ -218,7 +241,7 @@ export async function* streamChat(
   }
 
   const tools = TOOL_DEFINITIONS;
-  const instructions = buildInstructions(workspaceFolder, mode);
+  const instructions = await buildInstructions(workspaceFolder, mode, provider, isFirstPrompt);
 
   const input: Array<Record<string, unknown>> = [
     ...messages.map((m) => ({ role: m.role, content: m.content })),
