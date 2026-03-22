@@ -1,10 +1,19 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { messages, sessions, accounts } from "@/lib/db/schema";
-import { eq, asc } from "drizzle-orm";
+import { accounts, messages, sessions } from "@/lib/db/schema";
+import { asc, eq } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
-import { streamChat, type ChatMessage, type ReasoningEffort, type ToolCallRecord } from "@/lib/openai/client";
-import { streamChatZai } from "@/lib/providers/zai/client";
+import { enqueueJob } from "@/lib/jobs/repository";
+import type { ChatMessage } from "@/lib/openai/client";
+
+function parseMessageMetadata(metadata: string | null | undefined): Record<string, unknown> {
+  if (!metadata) return {};
+  try {
+    return JSON.parse(metadata);
+  } catch {
+    return {};
+  }
+}
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
@@ -18,25 +27,7 @@ export async function POST(request: NextRequest) {
   } = body;
 
   if (!sessionId || !content || !accountId || !model) {
-    return new Response(
-      JSON.stringify({ error: "Missing required fields" }),
-      { status: 400, headers: { "Content-Type": "application/json" } }
-    );
-  }
-
-  const [account] = await db
-    .select()
-    .from(accounts)
-    .where(eq(accounts.id, accountId));
-
-  const apiKey = account.provider === "zai"
-    ? account.apiKey || account.accessToken
-    : account.accessToken || account.apiKey;
-  if (!apiKey) {
-    return new Response(
-      JSON.stringify({ error: "Account has no API key or access token" }),
-      { status: 401, headers: { "Content-Type": "application/json" } }
-    );
+    return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
 
   const [session] = await db
@@ -44,11 +35,31 @@ export async function POST(request: NextRequest) {
     .from(sessions)
     .where(eq(sessions.id, sessionId));
 
-  const workspaceFolder = session?.workspaceFolder || process.cwd();
+  if (!session) {
+    return NextResponse.json({ error: "Session not found" }, { status: 404 });
+  }
+
+  const [account] = await db
+    .select()
+    .from(accounts)
+    .where(eq(accounts.id, accountId));
+
+  if (!account) {
+    return NextResponse.json({ error: "Account not found" }, { status: 404 });
+  }
+
+  const token = account.provider === "zai"
+    ? account.apiKey || account.accessToken
+    : account.accessToken || account.apiKey;
+
+  if (!token) {
+    return NextResponse.json({ error: "Account has no API key or access token" }, { status: 401 });
+  }
 
   const now = Date.now();
-
   const userMessageId = uuidv4();
+  const assistantMessageId = uuidv4();
+
   await db.insert(messages).values({
     id: userMessageId,
     sessionId,
@@ -56,9 +67,27 @@ export async function POST(request: NextRequest) {
     content,
     model: null,
     accountId,
+    metadata: JSON.stringify({ mode }),
+    createdAt: now,
+    finishedAt: now,
+  });
+
+  await db.insert(messages).values({
+    id: assistantMessageId,
+    sessionId,
+    role: "assistant",
+    content: "",
+    model,
+    accountId,
+    metadata: JSON.stringify({
+      mode,
+      job: {
+        status: "pending",
+      },
+      toolCalls: [],
+    }),
     createdAt: now,
     finishedAt: null,
-    metadata: JSON.stringify({ mode }),
   });
 
   const history = await db
@@ -67,165 +96,71 @@ export async function POST(request: NextRequest) {
     .where(eq(messages.sessionId, sessionId))
     .orderBy(asc(messages.createdAt));
 
-  const chatMessages: ChatMessage[] = history.map((msg) => ({
-    role: msg.role as "user" | "assistant" | "system",
-    content: msg.content,
-  }));
+  const snapshot: ChatMessage[] = history
+    .filter((msg) => {
+      if (msg.id === assistantMessageId) return false;
+      if (msg.role !== "assistant") return true;
+      if (!msg.finishedAt) return false;
+      const metadata = parseMessageMetadata(msg.metadata);
+      const job = (metadata.job as Record<string, unknown> | undefined) || undefined;
+      const status = typeof job?.status === "string" ? job.status : null;
+      if (status && ["pending", "running"].includes(status)) return false;
+      return true;
+    })
+    .map((msg) => ({
+      role: msg.role as "user" | "assistant" | "system",
+      content: msg.content,
+    }));
+
+  const job = await enqueueJob({
+    sessionId,
+    accountId,
+    model,
+    reasoningEffort,
+    mode,
+    userMessageId,
+    assistantMessageId,
+    historySnapshot: snapshot,
+  });
+
+  await db
+    .update(messages)
+    .set({
+      metadata: JSON.stringify({
+        mode,
+        job: {
+          id: job.id,
+          status: "pending",
+          queuedAt: job.queuedAt,
+        },
+        toolCalls: [],
+      }),
+    })
+    .where(eq(messages.id, assistantMessageId));
 
   await db
     .update(sessions)
-    .set({ accountId, model, reasoningEffort, updatedAt: now })
+    .set({
+      accountId,
+      model,
+      reasoningEffort,
+      updatedAt: now,
+      messageCount: (session.messageCount || 0) + 2,
+    })
     .where(eq(sessions.id, sessionId));
 
-  const assistantMessageId = uuidv4();
-  const encoder = new TextEncoder();
+  if ((session.messageCount || 0) <= 1) {
+    const title = content.slice(0, 60) + (content.length > 60 ? "..." : "");
+    await db
+      .update(sessions)
+      .set({ title })
+      .where(eq(sessions.id, sessionId));
+  }
 
-  const stream = new ReadableStream({
-    async start(controller) {
-      let fullContent = "";
-      const toolCalls: ToolCallRecord[] = [];
-      let workerCounter = 0;
-      const workerIds = new Map<string, string>();
-
-      const getWorkerLetter = (n: number): string => {
-        const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        if (n < 26) return letters[n];
-        const first = Math.floor(n / 26) - 1;
-        const second = n % 26;
-        return letters[first] + letters[second];
-      };
-
-      const assignWorkerId = (toolCallId: string, toolName: string): string => {
-        if (toolName === "task") {
-          const workerId = getWorkerLetter(workerCounter);
-          workerCounter++;
-          workerIds.set(toolCallId, workerId);
-          return workerId;
-        }
-        workerIds.set(toolCallId, "Main");
-        return "Main";
-      };
-
-      try {
-        const streamFn = account.provider === "zai"
-          ? streamChatZai(apiKey, chatMessages, model, reasoningEffort as ReasoningEffort, workspaceFolder, mode)
-          : streamChat(apiKey, chatMessages, model, reasoningEffort as ReasoningEffort, workspaceFolder, mode);
-
-        for await (const event of streamFn) {
-          if (event.type === "text_delta" && event.content) {
-            fullContent += event.content;
-            controller.enqueue(
-              encoder.encode(
-                `data: ${JSON.stringify({ type: "delta", content: event.content })}\n\n`
-              )
-            );
-          } else if (event.type === "tool_call_start") {
-            const workerId = assignWorkerId(event.toolCallId || "", event.toolName || "");
-            controller.enqueue(
-              encoder.encode(
-                `data: ${JSON.stringify({
-                  type: "tool_call_start",
-                  toolCallId: event.toolCallId,
-                  toolName: event.toolName,
-                  toolArguments: event.toolArguments,
-                  workerId,
-                })}\n\n`
-              )
-            );
-          } else if (event.type === "tool_result") {
-            const workerId = workerIds.get(event.toolCallId || "") || "Main";
-            toolCalls.push({
-              id: event.toolCallId || "",
-              name: event.toolName || "",
-              arguments: "",
-              result: event.toolResult || "",
-              workerId,
-            });
-            controller.enqueue(
-              encoder.encode(
-                `data: ${JSON.stringify({
-                  type: "tool_result",
-                  toolCallId: event.toolCallId,
-                  toolName: event.toolName,
-                  toolResult: event.toolResult,
-                  workerId,
-                })}\n\n`
-              )
-            );
-          } else if (event.type === "error") {
-            controller.enqueue(
-              encoder.encode(
-                `data: ${JSON.stringify({ type: "error", error: event.error })}\n\n`
-              )
-            );
-            break;
-          } else if (event.type === "done") {
-            const finishedAt = Date.now();
-
-            const metadata: Record<string, unknown> = { mode };
-            if (toolCalls.length > 0) {
-              metadata.toolCalls = toolCalls.map((tc) => ({
-                id: tc.id,
-                name: tc.name,
-                result: tc.result?.slice(0, 500),
-                workerId: tc.workerId || "Main",
-              }));
-            }
-
-            await db.insert(messages).values({
-              id: assistantMessageId,
-              sessionId,
-              role: "assistant",
-              content: fullContent || "(no response)",
-              model,
-              accountId,
-              createdAt: finishedAt,
-              finishedAt,
-              metadata: JSON.stringify(metadata),
-            });
-
-            await db
-              .update(sessions)
-              .set({ messageCount: history.length + 1, updatedAt: finishedAt })
-              .where(eq(sessions.id, sessionId));
-
-            if (history.length <= 1) {
-              const title =
-                content.slice(0, 60) + (content.length > 60 ? "..." : "");
-              await db
-                .update(sessions)
-                .set({ title })
-                .where(eq(sessions.id, sessionId));
-            }
-
-            controller.enqueue(
-              encoder.encode(
-                `data: ${JSON.stringify({
-                  type: "done",
-                  messageId: assistantMessageId,
-                })}\n\n`
-              )
-            );
-            break;
-          }
-        }
-      } catch (error) {
-        controller.enqueue(
-          encoder.encode(
-            `data: ${JSON.stringify({ type: "error", error: String(error) })}\n\n`
-          )
-        );
-      } finally {
-        controller.close();
-      }
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-    },
+  return NextResponse.json({
+    jobId: job.id,
+    userMessageId,
+    assistantMessageId,
+    status: "queued",
   });
 }

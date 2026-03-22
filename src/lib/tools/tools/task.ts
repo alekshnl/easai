@@ -13,6 +13,7 @@ export async function executeTask(
     provider: "openai" | "zai";
     workspaceFolder: string;
   },
+  signal?: AbortSignal,
 ): Promise<string> {
   if (!args.prompt || typeof args.prompt !== "string") {
     return "Error: prompt is required";
@@ -31,8 +32,9 @@ export async function executeTask(
     model: context.model,
     provider: context.provider,
     workspaceFolder: context.workspaceFolder,
+    signal,
     executeToolFn: async (name, toolArgs, workspaceFolder, readFiles) => {
-      return executeTool(name, toolArgs, workspaceFolder, readFiles);
+      return executeTool(name, toolArgs, workspaceFolder, readFiles, undefined, signal);
     },
   };
 

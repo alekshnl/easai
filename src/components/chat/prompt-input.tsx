@@ -4,7 +4,7 @@ import React, { useRef, useEffect, KeyboardEvent } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { QuickActions } from "./quick-actions";
-import { ArrowUp, Loader2, Lightbulb, Hammer, Square } from "lucide-react";
+import { ArrowUp, Lightbulb, Hammer, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Account } from "@/hooks/use-accounts";
 import { getModelById } from "@/lib/models";
@@ -40,8 +40,8 @@ export function PromptInput({
   onReasoningEffortChange,
   mode,
   onModeChange,
-  accounts,
-  onAccountChange,
+  accounts: _accounts,
+  onAccountChange: _onAccountChange,
   disabled,
 }: PromptInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -57,20 +57,19 @@ export function PromptInput({
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      if (value.trim() && !streaming && !disabled) {
+      if (value.trim() && !disabled) {
         onSubmit();
       }
     }
   };
 
-  const selectedAccount = accounts.find((a) => a.id === selectedAccountId);
   const selectedModelDef = getModelById(selectedModel || "");
   const modelLabel = selectedModelDef?.name || "Selecteer model";
 
   return (
     <div className="flex flex-col gap-2 border-t border-border/40 bg-background/80 px-4 pb-4 pt-3 backdrop-blur-sm">
       {/* Quick actions */}
-      <QuickActions onAction={(prompt) => onChange(prompt)} disabled={streaming || disabled} />
+      <QuickActions onAction={(prompt) => onChange(prompt)} disabled={disabled} />
 
       {/* Input area */}
       <div className={cn(
@@ -85,8 +84,8 @@ export function PromptInput({
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Stel een vraag of geef een opdracht... (Enter om te verzenden, Shift+Enter voor nieuwe regel)"
-          className="min-h-[40px] max-h-[240px] flex-1 resize-none border-0 bg-transparent p-0 font-mono text-xs shadow-none outline-none focus-visible:ring-0 placeholder:text-muted-foreground/40"
-          disabled={streaming || disabled}
+          className="min-h-[40px] max-h-[240px] flex-1 resize-none border-0 bg-transparent p-0 font-mono text-xs md:text-xs leading-relaxed shadow-none outline-none focus-visible:ring-0 placeholder:text-muted-foreground/40"
+          disabled={disabled}
           rows={1}
         />
 
@@ -95,7 +94,7 @@ export function PromptInput({
           variant="ghost"
           className={cn(
             "h-8 w-8 shrink-0 rounded-lg transition-all",
-            streaming
+            streaming && !value.trim()
               ? mode === "plan"
                 ? "!bg-amber-500/20 !text-amber-500"
                 : "!bg-blue-500/20 !text-blue-500"
@@ -103,10 +102,10 @@ export function PromptInput({
                 ? "!bg-primary !text-primary-foreground hover:!bg-primary/90"
                 : "!bg-muted !text-muted-foreground cursor-not-allowed"
           )}
-          onClick={streaming ? onCancel : onSubmit}
-          disabled={!streaming && (!value.trim() || disabled)}
+          onClick={streaming && !value.trim() ? onCancel : onSubmit}
+          disabled={(!streaming || value.trim().length > 0) && (!value.trim() || disabled)}
         >
-          {streaming ? (
+          {streaming && !value.trim() ? (
             <Square className="h-4 w-4 fill-current" />
           ) : (
             <ArrowUp className="h-3.5 w-3.5" />

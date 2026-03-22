@@ -30,7 +30,12 @@ export async function executeTool(
   workspaceFolder: string,
   readFiles: Set<string>,
   workerContext?: WorkerToolContext,
+  signal?: AbortSignal,
 ): Promise<ToolExecuteResult> {
+  if (signal?.aborted) {
+    return { output: "", error: "Aborted" };
+  }
+
   try {
     let output: string;
 
@@ -76,6 +81,7 @@ export async function executeTool(
         output = await executeBash(
           { command: args.command as string, timeout: args.timeout as number | undefined, workdir: args.workdir as string | undefined, description: args.description as string | undefined },
           workspaceFolder,
+          signal,
         );
         break;
 
@@ -124,6 +130,7 @@ export async function executeTool(
             provider: workerContext.provider,
             workspaceFolder,
           },
+          signal,
         );
         break;
 

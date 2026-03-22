@@ -7,6 +7,7 @@ const MAX_OUTPUT_LENGTH = 100_000;
 export async function executeBash(
   args: { command: string; timeout?: number; workdir?: string; description?: string },
   workspaceFolder: string,
+  signal?: AbortSignal,
 ): Promise<string> {
   const cwd = args.workdir
     ? (path.isAbsolute(args.workdir) ? args.workdir : path.resolve(workspaceFolder, args.workdir))
@@ -23,6 +24,11 @@ export async function executeBash(
   const timeout = args.timeout ?? DEFAULT_TIMEOUT;
 
   return new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve("Error: Aborted");
+      return;
+    }
+
     const proc = exec(args.command, {
       cwd,
       timeout,
@@ -55,6 +61,15 @@ export async function executeBash(
       if (!output.trim()) output = "(no output)";
       resolve(output);
     });
+
+    signal?.addEventListener("abort", () => {
+      try {
+        proc.kill("SIGTERM");
+        setTimeout(() => proc.kill("SIGKILL"), 500);
+      } catch {
+        // ignore
+      }
+    }, { once: true });
 
     proc.on("error", (err) => {
       resolve(`Error: ${err.message}`);
